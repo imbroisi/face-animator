@@ -53,23 +53,12 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
     if (previous?.face === face) previous.frames++
     else segments.push({ face, frames: 1 })
   }
-  // Keep a visible closed tail. A single last frame is dropped when FFmpeg
-  // applies `-t` audio duration + `-r 30` (ceil vs round).
-  const totalFrames = segments.reduce((sum, segment) => sum + segment.frames, 0)
-  const closedFrames = Math.min(8, totalFrames)
-  let kept = 0
-  const trimmed: { face: number; frames: number }[] = []
-  for (const segment of segments) {
-    if (kept >= totalFrames - closedFrames) break
-    const frames = Math.min(segment.frames, totalFrames - closedFrames - kept)
-    trimmed.push({ face: segment.face, frames })
-    kept += frames
-  }
-  const lastKept = trimmed.at(-1)
-  if (lastKept?.face === 0) lastKept.frames += closedFrames
-  else trimmed.push({ face: 0, frames: closedFrames })
-  segments.length = 0
-  segments.push(...trimmed)
+  const pad = fps * 2
+  if (segments[0]?.face === 0) segments[0].frames += pad
+  else segments.unshift({ face: 0, frames: pad })
+  const last = segments.at(-1)
+  if (last?.face === 0) last.frames += pad
+  else segments.push({ face: 0, frames: pad })
   const decoded = new Map<number, HTMLImageElement>()
   let width = 0
   let height = 0
@@ -85,7 +74,7 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
   if (!width || !height) throw new Error('Nenhuma imagem disponível para exportar.')
   const form = new FormData()
   form.set('audio', file)
-  form.set('manifest', JSON.stringify({ duration: timeline.duration, width, height, segments }))
+  form.set('manifest', JSON.stringify({ duration: timeline.duration + 4, width, height, segments }))
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
