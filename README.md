@@ -28,3 +28,11 @@ Ao atingir TRIGGER_OPENING, abre até a última imagem disponível. Respeita OPE
 A análise registra os inícios dos ciclos apenas ao carregar o áudio. Durante a reprodução, uma busca binária localiza o ciclo e calcula a fase pelo relógio do áudio, sem timers. Pausa e navegação mantêm a sincronização. Recarregue o áudio após editar as configurações.
 
 O Rhubarb não é usado nessa abordagem; o áudio é processado integralmente no navegador.
+
+## Exportar MOV transparente
+
+Após carregar o áudio, clique em **Salvar MOV**. O download usa o nome do áudio e inclui a animação completa nas dimensões originais das imagens, a 30 fps, fundo transparente e vídeo ProRes 4444 com canal alpha. A trilha vem do arquivo original (mantém os canais), codificada em PCM de 16 bits; não é o áudio mono usado para análise. Os controles do editor não aparecem no vídeo.
+
+A exportação usa FFmpeg no servidor local do Vite (`npm run dev` ou `npm run preview`). Instale FFmpeg e disponibilize-o no PATH, ou defina `FFMPEG_PATH`. Uma hospedagem apenas de arquivos estáticos não inclui esse endpoint. Limites atuais: 200 MB por envio, uma hora de áudio, uma exportação por vez e dez minutos de processamento. Os arquivos temporários são removidos ao terminar.
+
+Se as imagens tiverem tamanhos diferentes, o vídeo usa a maior largura e altura do conjunto; as menores são centralizadas sem redimensionamento, sobre fundo transparente.

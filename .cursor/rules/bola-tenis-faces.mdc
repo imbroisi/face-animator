@@ -1,0 +1,21 @@
+---
+description: Faces da bola de tênis para face-animator (chroma amarelo, 74x74)
+alwaysApply: true
+---
+
+# Bola de tênis — faces
+
+Trabalho em andamento: faces para animar a bola de tênis do cenário Ciência na Real.
+
+## Regras
+
+- Assets 74×74 px, só as feições (olhos/boca) em fundo transparente — sem círculo amarelo de chroma
+- Não colar faces na cena de fundo; gerar assets isolados
+- Não copiar a face emoji antiga; usar só como referência de proporção
+- Não sobrescrever `src/faces/normal/` sem pedido explícito
+- Handoff e refs: `handoff-bola-tenis/`
+- Rascunho: `src/faces/tennis/boca-aberta-74.png` (boca aberta — primeira face)
+
+## Pendente
+
+Gerar boca intermediária e fechada após o usuário aprovar/ajustar a boca aberta.

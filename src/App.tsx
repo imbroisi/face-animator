@@ -1,9 +1,10 @@
+import { exportMov } from './export/exportMov'
 import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { prepareAudio } from './audio/prepareAudio'
 import { buildMouthCycles, cycleFaceAt } from './audio/mouthCycles'
 import type { MouthTimeline } from './audio/mouthCycles'
-import { faces } from './faces/Faces'
+import { faces, faceNames } from './faces/Faces'
 import { Alert, Box, Button, CssBaseline, IconButton, Stack, SvgIcon, ThemeProvider, Tooltip, Typography, createTheme } from '@mui/material'
 
 const theme = createTheme({ palette: { mode: 'dark', background: { default: '#222222' }, primary: { main: '#58a6e7' } } })
@@ -63,6 +64,7 @@ const EMPTY_TRACK = {
 function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: Track | null; onRemove: () => void; onLevelChange: (level: number) => void }) {
   const track = loadedTrack ?? EMPTY_TRACK
   const audioRef = useRef<HTMLAudioElement>(null)
+  const stopped = useRef(false)
   const [playing, setPlaying] = useState(false)
   const [position, setPosition] = useState(0)
   const [duration, setDuration] = useState(track.duration)
@@ -83,7 +85,7 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: T
 
   const syncPosition = useCallback((time: number) => {
     setPosition(time)
-    const level = time >= track.duration ? 0 : cycleFaceAt(track.mouthTimeline, time)
+    const level = stopped.current || time >= track.duration ? 0 : cycleFaceAt(track.mouthTimeline, time)
     onLevelChange(level)
   }, [track, onLevelChange])
 
@@ -105,12 +107,25 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: T
       audio.pause()
       return
     }
+    stopped.current = false
     if (audio.ended) audio.currentTime = 0
     try {
       await audio.play()
     } catch {
       setPlayError('Não foi possível reproduzir o áudio. Tente novamente.')
     }
+  }
+
+  function stopPlayback() {
+    stopped.current = true
+    const audio = audioRef.current
+    if (audio) {
+      audio.pause()
+      audio.currentTime = 0
+    }
+    setPlaying(false)
+    setPosition(0)
+    onLevelChange(0)
   }
 
   const total = duration && Number.isFinite(duration) ? duration : track.duration
@@ -120,6 +135,7 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: T
     const audio = audioRef.current
     if (!audio || !Number.isFinite(value)) return
     const next = Math.max(0, Math.min(total, value))
+    stopped.current = false
     audio.currentTime = next
     syncPosition(next)
   }
@@ -141,9 +157,12 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: T
           <SvgIcon><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm3-9h2v8H9v-8zm4 0h2v8h-2v-8zM15.5 4l-1-1h-5l-1 1H5v2h14V4z" /></SvgIcon>
         </IconButton>
       </Tooltip>
-    <Button disabled={!loadedTrack} onClick={() => void togglePlayback()} aria-label={playing ? 'Pausar áudio' : 'Reproduzir áudio'} startIcon={<SvgIcon>{playing ? <path d="M6 5h4v14H6zm8 0h4v14h-4z" /> : <path d="M8 5v14l11-7z" />}</SvgIcon>}>
-      {playing ? 'Pausar' : 'Play'}
-    </Button>
+      <IconButton disabled={!loadedTrack} onClick={() => void togglePlayback()} aria-label={playing ? 'Pausar áudio' : 'Reproduzir áudio'}>
+        <SvgIcon>{playing ? <path d="M6 5h4v14H6zm8 0h4v14h-4z" /> : <path d="M8 5v14l11-7z" />}</SvgIcon>
+      </IconButton>
+      <IconButton disabled={!loadedTrack} onClick={stopPlayback} aria-label="Parar e voltar ao início">
+        <SvgIcon><path d="M6 6h12v12H6z" /></SvgIcon>
+      </IconButton>
     </Stack>
     {playError && <Alert severity="error" sx={{ mx: 2, mt: 1 }}>{playError}</Alert>}
   </>
@@ -151,6 +170,7 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: T
 
 export default function App() {
   const [faceLevel, setFaceLevel] = useState(0)
+  const [exporting, setExporting] = useState(false)
   const [track, setTrack] = useState<Track | null>(null)
   const [loading, setLoading] = useState(false)
   const [choosingFile, setChoosingFile] = useState(false)
@@ -234,11 +254,29 @@ export default function App() {
             if (file) void loadAudio(file)
           }} />
           <Typography role="status" variant="body2" noWrap title={hideTrackName ? undefined : track?.name} sx={{ minWidth: 0, color: !loading && !hideTrackName && !track ? '#909090' : 'text.primary' }}>{loading ? 'Analisando a fala…' : hideTrackName ? '' : track?.name ?? 'Nenhum áudio carregado'}</Typography>
+          <Button variant="outlined" disabled={!track || loading || choosingFile || exporting} onClick={async () => {
+            if (!track) return
+            setExporting(true)
+            setError('')
+            try { await exportMov(track.file, track.mouthTimeline, faces.normal) }
+            catch (error) { setError(error instanceof Error ? error.message : 'Falha ao exportar o vídeo.') }
+            finally { setExporting(false) }
+          }} sx={{ flexShrink: 0 }}>
+            {exporting ? 'Exportando…' : 'Salvar MOV'}
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexShrink: 0 }}>
+            <Typography aria-label="Nome da imagem">{faceNames.normal[faceLevel]}</Typography>
+            <Button variant="outlined" aria-label="Próxima imagem" sx={{ minWidth: 40 }} onClick={() => {
+              const indices = faces.normal.flatMap((url, index) => url ? [index] : [])
+              setFaceLevel(current => indices[(indices.indexOf(current) + 1) % indices.length] ?? 0)
+            }}>+</Button>
+          </Stack>
         </Stack>
         {error && <Alert severity="error" sx={{ mx: 2, mb: 2 }}>{error}</Alert>}
-        <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <Box sx={{ flex: 1, minHeight: 0, position: 'relative', bgcolor: '#c0c0c0' }}>
           <Box sx={{ position: 'absolute', inset: 0, p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Box component="img" src={faces.normal[faceLevel]} alt="Face normal" sx={{ display: 'block', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            <Box component="img" src={faces.normal[faceLevel]} alt="Face normal" sx={{ display: 'block', width: 'auto', height: 'auto', maxWidth: 'none', flexShrink: 0, objectFit: 'contain' }} />
           </Box>
         </Box>
         <Box component="section" aria-label="Área de áudio" sx={{ width: '100%', flexShrink: 0 }}>

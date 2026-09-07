@@ -8,6 +8,10 @@ const images = import.meta.glob<string>('../*/face-*.png', {
   import: 'default',
 });
 
+export const faceNames = Object.fromEntries(
+  TYPES.map((type) => [type, [] as string[]]),
+) as Record<FaceType, string[]>;
+
 export const faces = Object.fromEntries(
   TYPES.map((type) => {
     const collection: string[] = [];
@@ -16,7 +20,11 @@ export const faces = Object.fromEntries(
     for (const [path, url] of Object.entries(images)) {
       if (!path.startsWith(prefix)) continue;
       const match = /^face-(\d+)\.png$/.exec(path.slice(prefix.length));
-      if (match) collection[Number(match[1])] = url;
+      if (match) {
+        const index = Number(match[1]);
+        collection[index] = url;
+        faceNames[type][index] = path.slice(prefix.length);
+      }
     }
 
     return [type, collection];
