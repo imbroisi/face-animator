@@ -44,23 +44,30 @@ export function exportMovPlugin(): Plugin {
         used.add(segment.face)
       }
       if (frames !== Math.ceil(duration * 30)) throw new Error('Duração da animação inválida.')
-      if (segments[0].face !== 0 || segments.at(-1).face !== 0) throw new Error('A animação deve começar e terminar com a face-0.')
+      if (segments[0].face !== 0) throw new Error('A animação deve começar com mouth-close e eye-open.')
       const tailFrames = 60
-      if (segments.at(-1).frames < tailFrames) throw new Error('A animação deve terminar com 2 segundos da face-0.')
+      if (frames < tailFrames) throw new Error('A animação deve terminar com 2 segundos de mouth-close.')
       const bodyParts = segments.map(segment => ({ face: segment.face, frames: segment.frames }))
+      const tailParts: { face: number; frames: number }[] = []
       let remaining = tailFrames
       for (let i = bodyParts.length - 1; i >= 0 && remaining > 0; i--) {
         const take = Math.min(bodyParts[i].frames, remaining)
         bodyParts[i].frames -= take
+        tailParts.unshift({ face: bodyParts[i].face, frames: take })
         remaining -= take
       }
+      if (tailParts.some(segment => Math.floor(segment.face / 2) !== 0)) throw new Error('A animação deve terminar com 2 segundos de mouth-close.')
       const bodySegments = bodyParts.filter(segment => segment.frames > 0)
       const bodyFrames = bodySegments.reduce((sum, segment) => sum + segment.frames, 0)
-      const lines = ['ffconcat version 1.0']
-      for (const segment of bodySegments) {
-        lines.push(`file face-${segment.face}.png`, 'option framerate 30', `duration ${(segment.frames / 30).toFixed(9)}`)
+      const concatLines = (parts: { face: number; frames: number }[]) => {
+        const lines = ['ffconcat version 1.0']
+        for (const segment of parts) {
+          lines.push(`file face-${segment.face}.png`, 'option framerate 30', `duration ${(segment.frames / 30).toFixed(9)}`)
+        }
+        const lastFace = parts.at(-1)?.face ?? 0
+        lines.push(`file face-${lastFace}.png`, 'option framerate 30', 'duration 0.033333334', `file face-${lastFace}.png`)
+        return lines.join('\n')
       }
-      lines.push(`file face-${bodySegments.at(-1)?.face ?? 0}.png`, 'option framerate 30', 'duration 0.033333334', `file face-${bodySegments.at(-1)?.face ?? 0}.png`)
       directory = await mkdtemp(join(tmpdir(), 'face-animator-mov-'))
       for (const face of used) {
         const image = form.get(`face-${face}`)
@@ -73,7 +80,8 @@ export function exportMovPlugin(): Plugin {
       const bodyAudio = join(directory, 'body.wav')
       const tailAudio = join(directory, 'tail.wav')
       await writeFile(sourceAudio, Buffer.from(await audio.arrayBuffer()))
-      await writeFile(join(directory, 'frames.txt'), lines.join('\n'))
+      await writeFile(join(directory, 'frames.txt'), concatLines(bodySegments))
+      await writeFile(join(directory, 'tail.txt'), concatLines(tailParts))
       const ffmpeg = process.env.FFMPEG_PATH || 'ffmpeg'
       const ffprobe = process.env.FFPROBE_PATH || (ffmpeg.endsWith('ffmpeg') ? `${ffmpeg.slice(0, -6)}ffprobe` : 'ffprobe')
       const { stdout: probe } = await execute(ffprobe, ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=sample_rate,channels,channel_layout', '-of', 'json', sourceAudio], { timeout: 30_000, maxBuffer: 1024 * 1024, signal: abort.signal })
@@ -90,7 +98,7 @@ export function exportMovPlugin(): Plugin {
       const bodyMov = join(directory, 'body.mov')
       const tailMov = join(directory, 'tail.mov')
       await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'frames.txt'), '-i', bodyAudio, '-map', '0:v:0', '-map', '1:a:0', '-t', (bodyFrames / 30).toFixed(9), ...prores, bodyMov])
-      await run(['-loop', '1', '-framerate', '30', '-i', join(directory, 'face-0.png'), '-i', tailAudio, '-map', '0:v:0', '-map', '1:a:0', '-t', '2', ...prores, tailMov])
+      await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'tail.txt'), '-i', tailAudio, '-map', '0:v:0', '-map', '1:a:0', '-t', '2', ...prores, tailMov])
       await writeFile(join(directory, 'parts.txt'), 'ffconcat version 1.0\nfile body.mov\nfile tail.mov\n')
       const output = join(directory, 'animation.mov')
       await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'parts.txt'), '-c', 'copy', '-movflags', '+faststart', output])

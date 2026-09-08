@@ -1,5 +1,6 @@
 import { cycleFaceAt } from '../audio/mouthCycles'
 import type { MouthTimeline } from '../audio/mouthCycles'
+import { applyEyeCycle, eyeStateFromCompositeId, mouthFromCompositeId, type EyeState } from '../faces/eyes'
 
 function isChromaYellow(r: number, g: number, b: number) {
   return r > 160 && g > 120 && b < 90 && r + g > 2.2 * (b + 8)
@@ -44,21 +45,22 @@ function holdChromaInTransparent(context: CanvasRenderingContext2D, width: numbe
   context.putImageData(image, 0, 0)
 }
 
-export async function exportMov(file: File, timeline: MouthTimeline, images: readonly string[]) {
+export async function exportMov(file: File, timeline: MouthTimeline, images: readonly string[], eyeUrls: Record<EyeState, string>) {
   const fps = 30
-  const segments: { face: number; frames: number }[] = []
+  const mouths: { face: number; frames: number }[] = []
   for (let frame = 0; frame < Math.ceil(timeline.duration * fps); frame++) {
     const face = cycleFaceAt(timeline, frame / fps)
-    const previous = segments.at(-1)
+    const previous = mouths.at(-1)
     if (previous?.face === face) previous.frames++
-    else segments.push({ face, frames: 1 })
+    else mouths.push({ face, frames: 1 })
   }
   const pad = fps * 2
-  if (segments[0]?.face === 0) segments[0].frames += pad
-  else segments.unshift({ face: 0, frames: pad })
-  const last = segments.at(-1)
+  if (mouths[0]?.face === 0) mouths[0].frames += pad
+  else mouths.unshift({ face: 0, frames: pad })
+  const last = mouths.at(-1)
   if (last?.face === 0) last.frames += pad
-  else segments.push({ face: 0, frames: pad })
+  else mouths.push({ face: 0, frames: pad })
+  const segments = applyEyeCycle(mouths, fps)
   const decoded = new Map<number, HTMLImageElement>()
   let width = 0
   let height = 0
@@ -72,6 +74,17 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
     height = Math.max(height, image.naturalHeight)
   }
   if (!width || !height) throw new Error('Nenhuma imagem disponível para exportar.')
+  const decodedEyes = new Map<EyeState, HTMLImageElement>()
+  for (const state of ['open', 'close'] as const) {
+    const url = eyeUrls[state]
+    if (!url) continue
+    const image = new Image()
+    image.src = url
+    await image.decode()
+    decodedEyes.set(state, image)
+    width = Math.max(width, image.naturalWidth)
+    height = Math.max(height, image.naturalHeight)
+  }
   const form = new FormData()
   form.set('audio', file)
   form.set('manifest', JSON.stringify({ duration: timeline.duration + 4, width, height, segments }))
@@ -82,11 +95,15 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
   if (!context) throw new Error('Não foi possível preparar as imagens.')
   context.imageSmoothingEnabled = false
   for (const face of new Set(segments.map(segment => segment.face))) {
-    const image = decoded.get(face)
+    const image = decoded.get(mouthFromCompositeId(face))
     if (!image) throw new Error('Imagem da animação não encontrada.')
     context.clearRect(0, 0, width, height)
-    // Copy pixels 1:1. Smaller images stay centered with transparent padding.
+    // Copy pixels 1:1. Smaller images are centered on transparent padding.
     context.drawImage(image, Math.floor((width - image.naturalWidth) / 2), Math.floor((height - image.naturalHeight) / 2))
+    const eyesImage = decodedEyes.get(eyeStateFromCompositeId(face))
+    if (eyesImage) {
+      context.drawImage(eyesImage, Math.floor((width - eyesImage.naturalWidth) / 2), Math.floor((height - eyesImage.naturalHeight) / 2))
+    }
     holdChromaInTransparent(context, width, height)
     const png = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Falha ao preparar as imagens.')), 'image/png'))
     form.set(`face-${face}`, png, `face-${face}.png`)

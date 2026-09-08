@@ -36,7 +36,7 @@ export function buildMouthCycles(
   if (cycleSeconds <= 0) throw new Error('A duração do ciclo deve ser maior que zero.')
   // Use available indices, even when an image number is missing.
   const faceIndices = images.flatMap((url, index) => url ? [index] : [])
-  if (faceIndices[0] !== 0) throw new Error('A imagem face-0 é necessária.')
+  if (faceIndices[0] !== 0) throw new Error('A imagem mouth-close.png é necessária.')
   const starts: number[] = []
   const closingStarts: number[] = []
   let peak = 0

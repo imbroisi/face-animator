@@ -5,6 +5,7 @@ import { prepareAudio } from './audio/prepareAudio'
 import { buildMouthCycles, cycleFaceAt } from './audio/mouthCycles'
 import type { MouthTimeline } from './audio/mouthCycles'
 import { faces, faceNames } from './faces/Faces'
+import { eyes, eyeUrl } from './faces/eyes'
 import { Alert, Box, Button, CssBaseline, IconButton, Stack, SvgIcon, ThemeProvider, Tooltip, Typography, createTheme } from '@mui/material'
 
 const theme = createTheme({ palette: { mode: 'dark', background: { default: '#222222' }, primary: { main: '#58a6e7' } } })
@@ -61,7 +62,7 @@ const EMPTY_TRACK = {
   mouthTimeline: null,
 }
 
-function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: Track | null; onRemove: () => void; onLevelChange: (level: number) => void }) {
+function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange, onTimeChange }: { track: Track | null; onRemove: () => void; onLevelChange: (level: number) => void; onTimeChange: (time: number) => void }) {
   const track = loadedTrack ?? EMPTY_TRACK
   const audioRef = useRef<HTMLAudioElement>(null)
   const stopped = useRef(false)
@@ -85,9 +86,10 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: T
 
   const syncPosition = useCallback((time: number) => {
     setPosition(time)
+    onTimeChange(time)
     const level = stopped.current || time >= track.duration ? 0 : cycleFaceAt(track.mouthTimeline, time)
     onLevelChange(level)
-  }, [track, onLevelChange])
+  }, [track, onLevelChange, onTimeChange])
 
   useEffect(() => {
     if (!playing) return
@@ -124,8 +126,7 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: T
       audio.currentTime = 0
     }
     setPlaying(false)
-    setPosition(0)
-    onLevelChange(0)
+    syncPosition(0)
   }
 
   const total = duration && Number.isFinite(duration) ? duration : track.duration
@@ -170,6 +171,7 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange }: { track: T
 
 export default function App() {
   const [faceLevel, setFaceLevel] = useState(0)
+  const [playbackTime, setPlaybackTime] = useState(0)
   const [exporting, setExporting] = useState(false)
   const [track, setTrack] = useState<Track | null>(null)
   const [loading, setLoading] = useState(false)
@@ -181,7 +183,8 @@ export default function App() {
 
   useEffect(() => {
     // Warm the browser image cache before the first playback.
-    for (const url of faces.normal) {
+    for (const url of [...faces.normal, eyes.normal.open, eyes.normal.close]) {
+      if (!url) continue
       const image = new Image()
       image.src = url
       void image.decode().catch(() => {})
@@ -213,6 +216,7 @@ export default function App() {
       const mouthTimeline = buildMouthCycles(mono, buffer.sampleRate, faces.normal)
       if (id === request.current) {
         setFaceLevel(0)
+        setPlaybackTime(0)
         setHideTrackName(false)
         setTrack({ id, file, name: file.name, duration: buffer.duration, peaks, mouthTimeline })
       }
@@ -229,9 +233,12 @@ export default function App() {
     setTrack(null)
     setHideTrackName(false)
     setFaceLevel(0)
+    setPlaybackTime(0)
     setError('')
     setLoading(false)
   }
+
+  const eyeOverlay = eyeUrl('normal', playbackTime)
 
   return (
     <ThemeProvider theme={theme}>
@@ -258,7 +265,7 @@ export default function App() {
             if (!track) return
             setExporting(true)
             setError('')
-            try { await exportMov(track.file, track.mouthTimeline, faces.normal) }
+            try { await exportMov(track.file, track.mouthTimeline, faces.normal, eyes.normal) }
             catch (error) { setError(error instanceof Error ? error.message : 'Falha ao exportar o vídeo.') }
             finally { setExporting(false) }
           }} sx={{ flexShrink: 0 }}>
@@ -276,11 +283,14 @@ export default function App() {
         {error && <Alert severity="error" sx={{ mx: 2, mb: 2 }}>{error}</Alert>}
         <Box sx={{ flex: 1, minHeight: 0, position: 'relative', bgcolor: '#c0c0c0' }}>
           <Box sx={{ position: 'absolute', inset: 0, p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Box component="img" src={faces.normal[faceLevel]} alt="Face normal" sx={{ display: 'block', width: 'auto', height: 'auto', maxWidth: 'none', flexShrink: 0, objectFit: 'contain' }} />
+            <Box sx={{ position: 'relative', display: 'inline-block', lineHeight: 0 }}>
+              <Box component="img" src={faces.normal[faceLevel]} alt="Boca" sx={{ display: 'block', width: 'auto', height: 'auto', maxWidth: 'none', flexShrink: 0, objectFit: 'contain' }} />
+              {eyeOverlay && <Box component="img" src={eyeOverlay} alt="" sx={{ position: 'absolute', inset: 0, m: 'auto', display: 'block', width: 'auto', height: 'auto', maxWidth: 'none', pointerEvents: 'none' }} />}
+            </Box>
           </Box>
         </Box>
         <Box component="section" aria-label="Área de áudio" sx={{ width: '100%', flexShrink: 0 }}>
-          <AudioPlayer key={track?.id ?? 'empty'} track={track} onRemove={removeAudio} onLevelChange={setFaceLevel} />
+          <AudioPlayer key={track?.id ?? 'empty'} track={track} onRemove={removeAudio} onLevelChange={setFaceLevel} onTimeChange={setPlaybackTime} />
         </Box>
       </Box>
     </ThemeProvider>
