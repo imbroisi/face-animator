@@ -1,4 +1,5 @@
 import { exportMov } from './export/exportMov'
+import { isMovOutputSize, readMovOutputSize, writeMovOutputSize, type MovOutputSize } from './export/movSize'
 import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { prepareAudio } from './audio/prepareAudio'
@@ -6,7 +7,7 @@ import { buildMouthCycles, cycleFaceAt } from './audio/mouthCycles'
 import type { MouthTimeline } from './audio/mouthCycles'
 import { faces, faceNames } from './faces/Faces'
 import { eyes, eyeUrl } from './faces/eyes'
-import { Alert, Box, Button, CssBaseline, IconButton, Stack, SvgIcon, ThemeProvider, Tooltip, Typography, createTheme } from '@mui/material'
+import { Alert, Box, Button, CssBaseline, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, IconButton, LinearProgress, Radio, RadioGroup, Stack, SvgIcon, ThemeProvider, Tooltip, Typography, createTheme } from '@mui/material'
 
 const theme = createTheme({ palette: { mode: 'dark', background: { default: '#222222' }, primary: { main: '#58a6e7' } } })
 
@@ -169,16 +170,36 @@ function AudioPlayer({ track: loadedTrack, onRemove, onLevelChange, onTimeChange
   </>
 }
 
+function suggestedMovName(name: string) {
+  return `${name.replace(/\.[^.]+$/, '')}.mov`
+}
+
+function downloadMov(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
 export default function App() {
   const [faceLevel, setFaceLevel] = useState(0)
   const [playbackTime, setPlaybackTime] = useState(0)
   const [exporting, setExporting] = useState(false)
+  const [savePercent, setSavePercent] = useState(0)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [movSize, setMovSize] = useState<MovOutputSize>(() => readMovOutputSize())
   const [track, setTrack] = useState<Track | null>(null)
   const [loading, setLoading] = useState(false)
   const [choosingFile, setChoosingFile] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const [hideTrackName, setHideTrackName] = useState(false)
   const [error, setError] = useState('')
+  const abortExport = useRef<AbortController | null>(null)
   const request = useRef(0)
 
   useEffect(() => {
@@ -238,6 +259,45 @@ export default function App() {
     setLoading(false)
   }
 
+  function closeExportDialog() {
+    if (exporting) return
+    setExportOpen(false)
+  }
+
+  async function confirmExport() {
+    if (!track) return
+    writeMovOutputSize(movSize)
+    setError('')
+    const name = suggestedMovName(track.name)
+    const abort = new AbortController()
+    abortExport.current = abort
+    flushSync(() => {
+      setSavePercent(0)
+      setExporting(true)
+    })
+    try {
+      const blob = await exportMov(track.file, track.mouthTimeline, faces.normal, eyes.normal, movSize, setSavePercent, abort.signal)
+      if (!blob.size) throw new Error('O vídeo gerado está vazio.')
+      const file = blob.type === 'video/quicktime' ? blob : new Blob([blob], { type: 'video/quicktime' })
+      downloadMov(file, name)
+      setExportOpen(false)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setExportOpen(false)
+        return
+      }
+      setError(error instanceof Error ? error.message : 'Falha ao exportar o vídeo.')
+      setExportOpen(false)
+    } finally {
+      abortExport.current = null
+      setExporting(false)
+    }
+  }
+
+  function cancelExport() {
+    abortExport.current?.abort()
+  }
+
   const eyeOverlay = eyeUrl('normal', playbackTime)
 
   return (
@@ -261,15 +321,11 @@ export default function App() {
             if (file) void loadAudio(file)
           }} />
           <Typography role="status" variant="body2" noWrap title={hideTrackName ? undefined : track?.name} sx={{ minWidth: 0, color: !loading && !hideTrackName && !track ? '#909090' : 'text.primary' }}>{loading ? 'Analisando a fala…' : hideTrackName ? '' : track?.name ?? 'Nenhum áudio carregado'}</Typography>
-          <Button variant="outlined" disabled={!track || loading || choosingFile || exporting} onClick={async () => {
-            if (!track) return
-            setExporting(true)
-            setError('')
-            try { await exportMov(track.file, track.mouthTimeline, faces.normal, eyes.normal) }
-            catch (error) { setError(error instanceof Error ? error.message : 'Falha ao exportar o vídeo.') }
-            finally { setExporting(false) }
+          <Button variant="outlined" disabled={!track || loading || choosingFile || exporting} onClick={() => {
+            setMovSize(readMovOutputSize())
+            setExportOpen(true)
           }} sx={{ flexShrink: 0 }}>
-            {exporting ? 'Exportando…' : 'Salvar MOV'}
+            {exporting ? `Processando… ${savePercent}%` : 'Salvar MOV'}
           </Button>
           <Box sx={{ flex: 1 }} />
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexShrink: 0 }}>
@@ -293,6 +349,33 @@ export default function App() {
           <AudioPlayer key={track?.id ?? 'empty'} track={track} onRemove={removeAudio} onLevelChange={setFaceLevel} onTimeChange={setPlaybackTime} />
         </Box>
       </Box>
+      <Dialog open={exportOpen} onClose={closeExportDialog} aria-labelledby={exporting ? 'processing-title' : 'export-size-title'}>
+        {exporting ? <>
+          <DialogTitle id="processing-title">Processando…</DialogTitle>
+          <DialogContent sx={{ minWidth: 320 }}>
+            <Typography variant="body2" sx={{ mb: 1.5 }}>{savePercent}%</Typography>
+            <LinearProgress variant="determinate" value={savePercent} />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={cancelExport}>Cancelar</Button>
+          </DialogActions>
+        </> : <>
+          <DialogTitle id="export-size-title">Tamanho do vídeo</DialogTitle>
+          <DialogContent>
+            <FormControl>
+              <RadioGroup name="mov-output-size" value={movSize} onChange={(_, value) => { if (isMovOutputSize(value)) setMovSize(value) }}>
+                <FormControlLabel value="4k" control={<Radio />} label="4K (altura 2160)" />
+                <FormControlLabel value="1080p" control={<Radio />} label="1080p (altura 1080)" />
+                <FormControlLabel value="native" control={<Radio />} label="Nativo (resolução da face)" />
+              </RadioGroup>
+            </FormControl>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeExportDialog}>Cancelar</Button>
+            <Button variant="contained" onClick={() => void confirmExport()}>Salvar MOV</Button>
+          </DialogActions>
+        </>}
+      </Dialog>
     </ThemeProvider>
   )
 }

@@ -1,6 +1,7 @@
 import { cycleFaceAt } from '../audio/mouthCycles'
 import type { MouthTimeline } from '../audio/mouthCycles'
 import { applyEyeCycle, eyeStateFromCompositeId, mouthFromCompositeId, type EyeState } from '../faces/eyes'
+import { frameSize, type MovOutputSize } from './movSize'
 
 function isChromaYellow(r: number, g: number, b: number) {
   return r > 160 && g > 120 && b < 90 && r + g > 2.2 * (b + 8)
@@ -45,10 +46,18 @@ function holdChromaInTransparent(context: CanvasRenderingContext2D, width: numbe
   context.putImageData(image, 0, 0)
 }
 
-export async function exportMov(file: File, timeline: MouthTimeline, images: readonly string[], eyeUrls: Record<EyeState, string>) {
+export async function exportMov(file: File, timeline: MouthTimeline, images: readonly string[], eyeUrls: Record<EyeState, string>, size: MovOutputSize, onProgress?: (percent: number) => void, signal?: AbortSignal) {
+  const report = (percent: number) => {
+    shown = Math.max(shown, Math.min(100, Math.round(percent)))
+    onProgress?.(shown)
+  }
+  let shown = 0
+  const stopIfAborted = () => { if (signal?.aborted) throw new DOMException('Aborted', 'AbortError') }
+  report(1)
   const fps = 30
   const mouths: { face: number; frames: number }[] = []
   for (let frame = 0; frame < Math.ceil(timeline.duration * fps); frame++) {
+    if (frame % 30 === 0) stopIfAborted()
     const face = cycleFaceAt(timeline, frame / fps)
     const previous = mouths.at(-1)
     if (previous?.face === face) previous.frames++
@@ -64,7 +73,10 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
   const decoded = new Map<number, HTMLImageElement>()
   let width = 0
   let height = 0
+  const mouthCount = images.filter(Boolean).length
+  let loaded = 0
   for (const [face, url] of images.entries()) {
+    stopIfAborted()
     if (!url) continue
     const image = new Image()
     image.src = url
@@ -72,6 +84,8 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
     decoded.set(face, image)
     width = Math.max(width, image.naturalWidth)
     height = Math.max(height, image.naturalHeight)
+    loaded++
+    report(1 + (loaded / Math.max(mouthCount, 1)) * 5)
   }
   if (!width || !height) throw new Error('Nenhuma imagem disponível para exportar.')
   const decodedEyes = new Map<EyeState, HTMLImageElement>()
@@ -85,6 +99,11 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
     width = Math.max(width, image.naturalWidth)
     height = Math.max(height, image.naturalHeight)
   }
+  report(8)
+  // The sprite keeps its width and sits centered in a taller transparent frame.
+  const output = frameSize(size, width, height)
+  width = output.width
+  height = output.height
   const form = new FormData()
   form.set('audio', file)
   form.set('manifest', JSON.stringify({ duration: timeline.duration + 4, width, height, segments }))
@@ -94,11 +113,12 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
   const context = canvas.getContext('2d', { alpha: true, colorSpace: 'srgb', willReadFrequently: true })
   if (!context) throw new Error('Não foi possível preparar as imagens.')
   context.imageSmoothingEnabled = false
-  for (const face of new Set(segments.map(segment => segment.face))) {
+  const uniqueFaces = [...new Set(segments.map(segment => segment.face))]
+  for (const [index, face] of uniqueFaces.entries()) {
+    stopIfAborted()
     const image = decoded.get(mouthFromCompositeId(face))
     if (!image) throw new Error('Imagem da animação não encontrada.')
     context.clearRect(0, 0, width, height)
-    // Copy pixels 1:1. Smaller images are centered on transparent padding.
     context.drawImage(image, Math.floor((width - image.naturalWidth) / 2), Math.floor((height - image.naturalHeight) / 2))
     const eyesImage = decodedEyes.get(eyeStateFromCompositeId(face))
     if (eyesImage) {
@@ -107,19 +127,26 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
     holdChromaInTransparent(context, width, height)
     const png = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Falha ao preparar as imagens.')), 'image/png'))
     form.set(`face-${face}`, png, `face-${face}.png`)
+    report(8 + ((index + 1) / uniqueFaces.length) * 7)
   }
-  const response = await fetch('/api/export-mov', { method: 'POST', body: form })
-  if (!response.ok || !response.headers.get('content-type')?.includes('video/quicktime')) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.error || 'Não foi possível exportar. Reinicie o servidor com npm run dev.')
+  report(16)
+  const poll = window.setInterval(() => {
+    void fetch('/api/export-mov-progress', { signal }).then(async response => {
+      if (!response.ok) return
+      const data = await response.json() as { percent?: number }
+      if (typeof data.percent === 'number') report(16 + data.percent * 0.84)
+    }).catch(() => {})
+  }, 250)
+  try {
+    const response = await fetch('/api/export-mov', { method: 'POST', body: form, signal })
+    if (!response.ok || !response.headers.get('content-type')?.includes('video/quicktime')) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.error || 'Não foi possível exportar. Reinicie o servidor com npm run dev.')
+    }
+    const blob = await response.blob()
+    report(100)
+    return blob
+  } finally {
+    window.clearInterval(poll)
   }
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `${file.name.replace(/\.[^.]+$/, '')}.mov`
-  document.body.append(link)
-  link.click()
-  link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }

@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,14 +8,56 @@ import type { Plugin, Connect } from 'vite'
 const execute = promisify(execFile)
 const LIMIT = 200 * 1024 * 1024
 
+function runFfmpeg(ffmpeg: string, args: string[], abort: AbortController, onTime?: (seconds: number) => void) {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(ffmpeg, ['-hide_banner', '-nostdin', '-y', '-loglevel', 'error', ...(onTime ? ['-progress', 'pipe:1'] : []), ...args], { stdio: ['ignore', onTime ? 'pipe' : 'ignore', 'pipe'] })
+    const timer = setTimeout(() => child.kill('SIGKILL'), 600_000)
+    const stop = () => child.kill('SIGTERM')
+    abort.signal.addEventListener('abort', stop)
+    if (abort.signal.aborted) stop()
+    let stderr = ''
+    child.stderr?.on('data', chunk => { stderr += chunk.toString() })
+    let stdout = ''
+    child.stdout?.on('data', chunk => {
+      stdout += chunk.toString().replace(/\r/g, '\n')
+      const lines = stdout.split('\n')
+      stdout = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('out_time_us=')) continue
+        const seconds = Number(line.slice(12)) / 1e6
+        if (Number.isFinite(seconds) && seconds >= 0) onTime?.(seconds)
+      }
+    })
+    child.on('error', error => {
+      clearTimeout(timer)
+      abort.signal.removeEventListener('abort', stop)
+      reject(error)
+    })
+    child.on('close', code => {
+      clearTimeout(timer)
+      abort.signal.removeEventListener('abort', stop)
+      if (code === 0) resolve()
+      else reject(new Error(stderr.trim() || `FFmpeg encerrou com código ${code}.`))
+    })
+  })
+}
+
 export function exportMovPlugin(): Plugin {
   let busy = false
+  let percent = 0
+  const setPercent = (value: number) => { percent = Math.max(percent, Math.min(100, Math.round(value))) }
   const middleware: Connect.NextHandleFunction = async (req, res, next) => {
+    if (req.url === '/api/export-mov-progress') {
+      if (req.method !== 'GET') { res.writeHead(405).end(); return }
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ percent }))
+      return
+    }
     if (req.url !== '/api/export-mov') return next()
     if (req.method !== 'POST') { res.writeHead(405).end(); return }
     if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) { res.writeHead(403).end(); return }
     if (busy) { res.writeHead(409, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Já existe uma exportação em andamento.' })); return }
     busy = true
+    percent = 0
     let directory: string | undefined
     const abort = new AbortController()
     const cancel = () => { if (!res.writableEnded) abort.abort() }
@@ -90,19 +132,29 @@ export function exportMovPlugin(): Plugin {
       const channels = Number(stream?.channels) || 2
       const layout = stream?.channel_layout && stream.channel_layout !== 'unknown' ? stream.channel_layout : channels === 1 ? 'mono' : channels === 2 ? 'stereo' : `${channels}c`
       const format = `aformat=sample_rates=${rate}:channel_layouts=${layout}`
-      const run = (args: string[]) => execute(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', ...args], { timeout: 600_000, maxBuffer: 1024 * 1024, signal: abort.signal })
-      const prores = ['-vf', 'format=rgba,fps=30,setsar=1', '-sws_flags', 'neighbor+accurate_rnd+full_chroma_int+full_chroma_inp', '-video_track_timescale', '30000', '-color_range', 'pc', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'iec61966-2-1', '-c:v', 'prores_ks', '-profile:v', '4', '-pix_fmt', 'yuva444p10le', '-alpha_bits', '16', '-c:a', 'pcm_s16le']
+      const run = (args: string[], onTime?: (seconds: number) => void) => runFfmpeg(ffmpeg, args, abort, onTime)
+      const encode = ['-vf', 'format=rgba,fps=30,setsar=1', '-sws_flags', 'neighbor+accurate_rnd+full_chroma_int+full_chroma_inp', '-video_track_timescale', '30000', '-color_range', 'pc', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'iec61966-2-1', '-c:v', 'prores_ks', '-profile:v', '4', '-pix_fmt', 'yuva444p10le', '-alpha_bits', '16', '-c:a', 'pcm_s16le']
+      const bodySeconds = bodyFrames / 30
+      setPercent(6)
       // Head: digital silence. Tail: inaudible tone so Filmora does not trim the clip end.
       await run(['-f', 'lavfi', '-t', '2', '-i', `anullsrc=r=${rate}:cl=${layout}`, '-i', sourceAudio, '-filter_complex', `[0:a]${format}[s];[1:a]${format}[o];[s][o]concat=n=2:v=0:a=1[a]`, '-map', '[a]', '-c:a', 'pcm_s16le', bodyAudio])
       await run(['-f', 'lavfi', '-t', '2', '-i', `sine=frequency=18:sample_rate=${rate}:duration=2`, '-af', `volume=0.0008,${format}`, '-c:a', 'pcm_s16le', tailAudio])
+      setPercent(10)
       const bodyMov = join(directory, 'body.mov')
       const tailMov = join(directory, 'tail.mov')
-      await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'frames.txt'), '-i', bodyAudio, '-map', '0:v:0', '-map', '1:a:0', '-t', (bodyFrames / 30).toFixed(9), ...prores, bodyMov])
-      await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'tail.txt'), '-i', tailAudio, '-map', '0:v:0', '-map', '1:a:0', '-t', '2', ...prores, tailMov])
+      await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'frames.txt'), '-i', bodyAudio, '-map', '0:v:0', '-map', '1:a:0', '-t', bodySeconds.toFixed(9), ...encode, bodyMov], seconds => {
+        setPercent(10 + Math.min(1, seconds / Math.max(bodySeconds, 0.001)) * 75)
+      })
+      setPercent(85)
+      await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'tail.txt'), '-i', tailAudio, '-map', '0:v:0', '-map', '1:a:0', '-t', '2', ...encode, tailMov], seconds => {
+        setPercent(85 + Math.min(1, seconds / 2) * 10)
+      })
+      setPercent(95)
       await writeFile(join(directory, 'parts.txt'), 'ffconcat version 1.0\nfile body.mov\nfile tail.mov\n')
       const output = join(directory, 'animation.mov')
       await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'parts.txt'), '-c', 'copy', '-movflags', '+faststart', output])
       const video = await readFile(output)
+      setPercent(100)
       res.writeHead(200, { 'Content-Type': 'video/quicktime', 'Content-Length': video.length, 'Content-Disposition': 'attachment; filename="animation.mov"' }).end(video)
     } catch (error) {
       console.error('MOV export:', error)

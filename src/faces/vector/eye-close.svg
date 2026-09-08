@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 74 74" width="74" height="74">
+  <title>eye-close</title>
+  <defs>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="0.16"/>
+    </filter>
+  </defs>
+  <g filter="url(#soft)">
+    <rect x="21.15" y="24.05" width="7.7" height="1.55" rx="0.77" fill="#0B0908"/>
+    <rect x="44.15" y="24.05" width="7.7" height="1.55" rx="0.77" fill="#0B0908"/>
+  </g>
+</svg>
