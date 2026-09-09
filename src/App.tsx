@@ -19,6 +19,8 @@ const WAVEFORM_HIGHLIGHT = '#2d5a8f'
 const WAVEFORM_PEAK = '#508fc5'
 const PLAYHEAD = '#29a7ff'
 const PLAYHEAD_HANDLE = 22
+const PIN_LANE = 46
+const SEEK_ABOVE = 68
 const EDGE_HIT = 2
 const EDGE_OUTSIDE = 3
 const MOVE_THRESHOLD = 6
@@ -273,6 +275,7 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
   const edgeDrag = useRef<{ id: number; edge: 'start' | 'end'; startX: number; startY: number } | null>(null)
   const moved = useRef(false)
   const pressingArea = useRef(false)
+  const pressStart = useRef<{ x: number; y: number } | null>(null)
   const scrubbing = useRef(false)
 
   function timeFromClientX(clientX: number) {
@@ -323,6 +326,12 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
     }
   }, [paletteDrag, loadedTrack, drops, total, onDropFace])
 
+  function beginPress(event: PointerEvent<HTMLElement>) {
+    moved.current = false
+    pressingArea.current = true
+    pressStart.current = { x: event.clientX, y: event.clientY }
+  }
+
   function handlePlayheadPointerDown(event: PointerEvent<HTMLElement>) {
     if (event.button !== 0 || !loadedTrack || paletteDrag) return
     event.preventDefault()
@@ -351,18 +360,14 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
     if (event.button !== 0 || !loadedTrack || paletteDrag) return
     if (event.target instanceof Element && event.target.closest('[data-drop-pin]')) return
     event.preventDefault()
-    scrubbing.current = true
-    event.currentTarget.setPointerCapture(event.pointerId)
-    const time = timeFromClientX(event.clientX)
-    if (time !== null) seekTo(time)
+    beginPress(event)
   }
 
   function handlePinPointerDown(event: PointerEvent<HTMLElement>, drop: FaceDrop) {
     if (event.button !== 0 || paletteDrag) return
     event.preventDefault()
     event.stopPropagation()
-    moved.current = false
-    pressingArea.current = true
+    beginPress(event)
     setSelectedId(drop.id)
     const time = timeFromClientX(event.clientX) ?? drop.start
     pinDrag.current = { id: drop.id, origin: drop.start, grab: time - drop.start, startX: event.clientX, startY: event.clientY }
@@ -374,8 +379,7 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
     if (event.button !== 0 || paletteDrag) return
     event.preventDefault()
     event.stopPropagation()
-    moved.current = false
-    pressingArea.current = true
+    beginPress(event)
     setSelectedId(null)
     const time = timeFromClientX(event.clientX) ?? drop.start
     pinDrag.current = { id: drop.id, origin: drop.start, grab: time - drop.start, startX: event.clientX, startY: event.clientY }
@@ -402,8 +406,7 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
     if (event.button !== 0 || paletteDrag) return
     event.preventDefault()
     event.stopPropagation()
-    moved.current = false
-    pressingArea.current = true
+    beginPress(event)
     setSelectedId(null)
     pinDrag.current = null
     edgeDrag.current = { id: drop.id, edge, startX: event.clientX, startY: event.clientY }
@@ -428,9 +431,16 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
   }
 
   useEffect(() => {
+    function onPointerMove(event: globalThis.PointerEvent) {
+      const start = pressStart.current
+      if (!pressingArea.current || moved.current || !start) return
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) >= MOVE_THRESHOLD) moved.current = true
+    }
+
     function onPointerUp(event: globalThis.PointerEvent) {
       if (event.button !== 0 || !pressingArea.current) return
       pressingArea.current = false
+      pressStart.current = null
       if (!moved.current) {
         const box = waveRef.current?.getBoundingClientRect()
         const audio = audioRef.current
@@ -446,8 +456,12 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
       edgeDrag.current = null
       setPinDraggingId(null)
     }
+    window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
-    return () => window.removeEventListener('pointerup', onPointerUp)
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
   }, [total, syncPosition])
 
   useEffect(() => {
@@ -486,8 +500,19 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
       <Typography component="span" variant="body2" sx={{ fontSize: '1.3125rem', color: '#909090' }} aria-label="Tempo total"><TimeDisplay seconds={total} /></Typography>
     </Box>
     <Box sx={{ position: 'relative' }}>
+      <Box
+        onPointerDown={handleWavePointerDown}
+        onPointerUp={handlePlayheadPointerUp}
+        onPointerCancel={handlePlayheadPointerUp}
+        sx={{
+          position: 'absolute', left: 0, right: 0,
+          top: `${Math.max(0, PLAYHEAD_HANDLE + PIN_LANE - SEEK_ABOVE)}px`,
+          height: `${Math.min(SEEK_ABOVE, PLAYHEAD_HANDLE + PIN_LANE)}px`,
+          zIndex: 0, pointerEvents: paletteDrag ? 'none' : 'auto', touchAction: 'none',
+        }}
+      />
       <Box sx={{ height: PLAYHEAD_HANDLE, position: 'relative', pointerEvents: 'none' }} />
-      <Box sx={{ height: 46, position: 'relative', pointerEvents: 'none' }}>
+      <Box sx={{ height: PIN_LANE, position: 'relative', pointerEvents: 'none' }}>
         {loadedTrack && total > 0 && drops.map(drop => (
           <Box
             key={drop.id}
