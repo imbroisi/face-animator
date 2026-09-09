@@ -5,7 +5,7 @@ export const EYE_OPEN_TIME_SHORT_PERCENT = 0.25 // percent com eye-open.
 export const EYE_CLOSE_TIME = 0.15 // segundos com eye-close.
 // ========================================================
 
-import { FACE_TYPES, type FaceType } from './Faces'
+import { FACE_TYPES, MOUTH_SLOTS, type FaceType } from './Faces'
 
 export type EyeState = 'open' | 'close'
 
@@ -62,24 +62,29 @@ export function eyeUrl(type: FaceType, time: number) {
   return eyes[type][cycleEyeAt(time)]
 }
 
-export function eyeCompositeId(mouth: number, eye: EyeState) {
-  return mouth * 2 + (eye === 'close' ? 1 : 0)
+// Um quadro é identificado por conjunto de face, boca e estado dos olhos.
+export function faceCompositeId(type: FaceType, mouth: number, eye: EyeState) {
+  return (FACE_TYPES.indexOf(type) * MOUTH_SLOTS + mouth) * 2 + (eye === 'close' ? 1 : 0)
+}
+
+export function typeFromCompositeId(id: number): FaceType {
+  return FACE_TYPES[Math.floor(id / (MOUTH_SLOTS * 2))] ?? FACE_TYPES[0]
 }
 
 export function mouthFromCompositeId(id: number) {
-  return Math.floor(id / 2)
+  return Math.floor(id / 2) % MOUTH_SLOTS
 }
 
 export function eyeStateFromCompositeId(id: number): EyeState {
   return id % 2 === 1 ? 'close' : 'open'
 }
 
-export function applyEyeCycle(segments: { face: number; frames: number }[], fps: number) {
+export function applyEyeCycle(segments: { mouth: number; type: FaceType; frames: number }[], fps: number) {
   const out: { face: number; frames: number }[] = []
   let frame = 0
   for (const segment of segments) {
     for (let i = 0; i < segment.frames; i++) {
-      const face = eyeCompositeId(segment.face, cycleEyeAt(frame / fps))
+      const face = faceCompositeId(segment.type, segment.mouth, cycleEyeAt(frame / fps))
       const previous = out.at(-1)
       if (previous?.face === face) previous.frames++
       else out.push({ face, frames: 1 })

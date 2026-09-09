@@ -7,6 +7,8 @@ import type { Plugin, Connect } from 'vite'
 
 const execute = promisify(execFile)
 const LIMIT = 200 * 1024 * 1024
+// Espelha MOUTH_SLOTS do cliente: o id do quadro é (conjunto * bocas + boca) * 2 + olho.
+const MOUTH_SLOTS = 3
 
 function runFfmpeg(ffmpeg: string, args: string[], abort: AbortController, onTime?: (seconds: number) => void) {
   return new Promise<void>((resolve, reject) => {
@@ -86,7 +88,7 @@ export function exportMovPlugin(): Plugin {
         used.add(segment.face)
       }
       if (frames !== Math.ceil(duration * 30)) throw new Error('Duração da animação inválida.')
-      if (segments[0].face !== 0) throw new Error('A animação deve começar com mouth-close e eye-open.')
+      if (segments[0].face % (MOUTH_SLOTS * 2) !== 0) throw new Error('A animação deve começar com mouth-close e eye-open.')
       const tailFrames = 60
       if (frames < tailFrames) throw new Error('A animação deve terminar com 2 segundos de mouth-close.')
       const bodyParts = segments.map(segment => ({ face: segment.face, frames: segment.frames }))
@@ -98,7 +100,7 @@ export function exportMovPlugin(): Plugin {
         tailParts.unshift({ face: bodyParts[i].face, frames: take })
         remaining -= take
       }
-      if (tailParts.some(segment => Math.floor(segment.face / 2) !== 0)) throw new Error('A animação deve terminar com 2 segundos de mouth-close.')
+      if (tailParts.some(segment => Math.floor(segment.face / 2) % MOUTH_SLOTS !== 0)) throw new Error('A animação deve terminar com 2 segundos de mouth-close.')
       const bodySegments = bodyParts.filter(segment => segment.frames > 0)
       const bodyFrames = bodySegments.reduce((sum, segment) => sum + segment.frames, 0)
       const concatLines = (parts: { face: number; frames: number }[]) => {

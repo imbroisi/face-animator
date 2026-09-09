@@ -1,6 +1,7 @@
 import { cycleFaceAt } from '../audio/mouthCycles'
 import type { MouthTimeline } from '../audio/mouthCycles'
-import { applyEyeCycle, eyeStateFromCompositeId, mouthFromCompositeId, type EyeState } from '../faces/eyes'
+import { applyEyeCycle, eyes, eyeStateFromCompositeId, mouthFromCompositeId, typeFromCompositeId } from '../faces/eyes'
+import { faces, type FaceType } from '../faces/Faces'
 import { frameSize, type MovOutputSize } from './movSize'
 
 function isChromaYellow(r: number, g: number, b: number) {
@@ -46,7 +47,7 @@ function holdChromaInTransparent(context: CanvasRenderingContext2D, width: numbe
   context.putImageData(image, 0, 0)
 }
 
-export async function exportMov(file: File, timeline: MouthTimeline, images: readonly string[], eyeUrls: Record<EyeState, string>, size: MovOutputSize, onProgress?: (percent: number) => void, signal?: AbortSignal) {
+export async function exportMov(file: File, timeline: MouthTimeline, faceAt: (time: number) => FaceType, size: MovOutputSize, onProgress?: (percent: number) => void, signal?: AbortSignal) {
   const report = (percent: number) => {
     shown = Math.max(shown, Math.min(100, Math.round(percent)))
     onProgress?.(shown)
@@ -55,50 +56,47 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
   const stopIfAborted = () => { if (signal?.aborted) throw new DOMException('Aborted', 'AbortError') }
   report(1)
   const fps = 30
-  const mouths: { face: number; frames: number }[] = []
+  const mouths: { mouth: number; type: FaceType; frames: number }[] = []
   for (let frame = 0; frame < Math.ceil(timeline.duration * fps); frame++) {
     if (frame % 30 === 0) stopIfAborted()
-    const face = cycleFaceAt(timeline, frame / fps)
+    const time = frame / fps
+    const mouth = cycleFaceAt(timeline, time)
+    const type = faceAt(time)
     const previous = mouths.at(-1)
-    if (previous?.face === face) previous.frames++
-    else mouths.push({ face, frames: 1 })
+    if (previous?.mouth === mouth && previous.type === type) previous.frames++
+    else mouths.push({ mouth, type, frames: 1 })
   }
   const pad = fps * 2
-  if (mouths[0]?.face === 0) mouths[0].frames += pad
-  else mouths.unshift({ face: 0, frames: pad })
+  const headType = faceAt(0)
+  if (mouths[0]?.mouth === 0 && mouths[0].type === headType) mouths[0].frames += pad
+  else mouths.unshift({ mouth: 0, type: headType, frames: pad })
+  const tailType = faceAt(timeline.duration)
   const last = mouths.at(-1)
-  if (last?.face === 0) last.frames += pad
-  else mouths.push({ face: 0, frames: pad })
+  if (last?.mouth === 0 && last.type === tailType) last.frames += pad
+  else mouths.push({ mouth: 0, type: tailType, frames: pad })
   const segments = applyEyeCycle(mouths, fps)
-  const decoded = new Map<number, HTMLImageElement>()
+  const uniqueFaces = [...new Set(segments.map(segment => segment.face))]
+  const layers = new Map(uniqueFaces.map(face => {
+    const type = typeFromCompositeId(face)
+    return [face, { mouth: faces[type][mouthFromCompositeId(face)] ?? '', eye: eyes[type][eyeStateFromCompositeId(face)] ?? '' }]
+  }))
+  const sources = [...new Set([...layers.values()].flatMap(layer => [layer.mouth, layer.eye]).filter(Boolean))]
+  const decoded = new Map<string, HTMLImageElement>()
   let width = 0
   let height = 0
-  const mouthCount = images.filter(Boolean).length
   let loaded = 0
-  for (const [face, url] of images.entries()) {
+  for (const url of sources) {
     stopIfAborted()
-    if (!url) continue
     const image = new Image()
     image.src = url
     await image.decode()
-    decoded.set(face, image)
+    decoded.set(url, image)
     width = Math.max(width, image.naturalWidth)
     height = Math.max(height, image.naturalHeight)
     loaded++
-    report(1 + (loaded / Math.max(mouthCount, 1)) * 5)
+    report(1 + (loaded / sources.length) * 7)
   }
   if (!width || !height) throw new Error('Nenhuma imagem disponível para exportar.')
-  const decodedEyes = new Map<EyeState, HTMLImageElement>()
-  for (const state of ['open', 'close'] as const) {
-    const url = eyeUrls[state]
-    if (!url) continue
-    const image = new Image()
-    image.src = url
-    await image.decode()
-    decodedEyes.set(state, image)
-    width = Math.max(width, image.naturalWidth)
-    height = Math.max(height, image.naturalHeight)
-  }
   report(8)
   // The sprite keeps its width and sits centered in a taller transparent frame.
   const output = frameSize(size, width, height)
@@ -113,14 +111,14 @@ export async function exportMov(file: File, timeline: MouthTimeline, images: rea
   const context = canvas.getContext('2d', { alpha: true, colorSpace: 'srgb', willReadFrequently: true })
   if (!context) throw new Error('Não foi possível preparar as imagens.')
   context.imageSmoothingEnabled = false
-  const uniqueFaces = [...new Set(segments.map(segment => segment.face))]
   for (const [index, face] of uniqueFaces.entries()) {
     stopIfAborted()
-    const image = decoded.get(mouthFromCompositeId(face))
+    const layer = layers.get(face)
+    const image = layer && decoded.get(layer.mouth)
     if (!image) throw new Error('Imagem da animação não encontrada.')
     context.clearRect(0, 0, width, height)
     context.drawImage(image, Math.floor((width - image.naturalWidth) / 2), Math.floor((height - image.naturalHeight) / 2))
-    const eyesImage = decodedEyes.get(eyeStateFromCompositeId(face))
+    const eyesImage = decoded.get(layer.eye)
     if (eyesImage) {
       context.drawImage(eyesImage, Math.floor((width - eyesImage.naturalWidth) / 2), Math.floor((height - eyesImage.naturalHeight) / 2))
     }

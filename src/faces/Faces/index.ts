@@ -1,4 +1,4 @@
-const TYPES = ['normal', 'upset'] as const;
+const TYPES = ['normal', 'upset', 'sad'] as const;
 
 export type FaceType = (typeof TYPES)[number];
 export const FACE_TYPES = TYPES;
@@ -8,6 +8,8 @@ export function isFaceType(value: string): value is FaceType {
 }
 
 const MOUTHS = ['mouth-close.png', 'mouth-semi.png', 'mouth-open.png'] as const;
+
+export const MOUTH_SLOTS = MOUTHS.length;
 
 const mouthImages = import.meta.glob<string>('../**/mouth-*.png', {
   eager: true,

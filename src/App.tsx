@@ -30,7 +30,10 @@ const CURSOR_LEFT = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="h
 const CURSOR_RIGHT = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#fff" stroke="#111" stroke-linejoin="round" stroke-width="1.5" d="M9.5 3.5 20.5 12l-11 8.5v-6h-7v-5h7z"/></svg>')}") 20 12, e-resize`
 
 type FaceDrop = { id: number; start: number; end: number; face: FaceType }
-type PaletteDrag = { width: number; height: number; hotX: number; hotY: number }
+type PaletteDrag = { width: number; height: number; hotX: number; hotY: number; face: FaceType }
+
+// 'normal' é a face padrão da trilha, então não aparece na paleta.
+const PALETTE_FACES = FACE_TYPES.filter(type => type !== 'normal')
 
 function dropTimeOk(start: number, duration: number) {
   return Number.isFinite(start) && start >= 0 && start < duration
@@ -166,16 +169,14 @@ const EMPTY_TRACK = {
   mouthTimeline: null,
 }
 
-function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRemove, onLevelChange, onTimeChange, onDropFace, onRemoveDrop, onMoveDrop, onResizeDrop }: {
+function AudioPlayer({ track: loadedTrack, drops, paletteDrag, onRemove, onLevelChange, onTimeChange, onDropFace, onRemoveDrop, onMoveDrop, onResizeDrop }: {
   track: Track | null
   drops: readonly FaceDrop[]
   paletteDrag: PaletteDrag | null
-  mouth: string
-  eye: string
   onRemove: () => void
   onLevelChange: (level: number) => void
   onTimeChange: (time: number) => void
-  onDropFace: (time: number) => void
+  onDropFace: (time: number, face: FaceType) => void
   onRemoveDrop: (id: number) => void
   onMoveDrop: (id: number, start: number) => void
   onResizeDrop: (id: number, edge: 'start' | 'end', time: number) => void
@@ -286,7 +287,7 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
 
   useEffect(() => {
     if (!paletteDrag || !loadedTrack) return
-    const { hotX, hotY, width, height } = paletteDrag
+    const { hotX, hotY, width, height, face: dragFace } = paletteDrag
 
     function touchesWave(clientX: number, clientY: number) {
       const wave = waveRef.current?.getBoundingClientRect()
@@ -313,7 +314,7 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
       if (!touchesWave(event.clientX, event.clientY)) return
       event.preventDefault()
       const time = dropTimeAt(event.clientX, event.clientY)
-      if (time !== null) onDropFace(time)
+      if (time !== null) onDropFace(time, dragFace)
     }
 
     document.addEventListener('dragover', handleDragOver)
@@ -533,7 +534,7 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
           >
             <Box sx={{ width: 40, height: 40, borderRadius: '6px', boxShadow: selectedId === drop.id ? `0 0 0 2px ${SELECT_ORANGE}` : 'none' }}>
               <Box sx={{ width: '100%', height: '100%', borderRadius: '6px', bgcolor: '#909090', overflow: 'hidden' }}>
-                <FaceThumb mouth={mouth} eye={eye} />
+                <FaceThumb mouth={faces[drop.face][0]} eye={eyes[drop.face].open} />
               </Box>
             </Box>
             <Box aria-hidden="true" sx={{ width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderTop: '6px solid #909090' }} />
@@ -769,7 +770,7 @@ export default function App() {
       setExporting(true)
     })
     try {
-      const blob = await exportMov(track.file, track.mouthTimeline, faces[face], eyes[face], movSize, setSavePercent, abort.signal)
+      const blob = await exportMov(track.file, track.mouthTimeline, time => faceAtTime(time, drops), movSize, setSavePercent, abort.signal)
       if (!blob.size) throw new Error('O vídeo gerado está vazio.')
       const file = blob.type === 'video/quicktime' ? blob : new Blob([blob], { type: 'video/quicktime' })
       downloadMov(file, name)
@@ -791,7 +792,7 @@ export default function App() {
     abortExport.current?.abort()
   }
 
-  function handleFaceDragStart(event: DragEvent) {
+  function handleFaceDragStart(event: DragEvent, type: FaceType) {
     if (!track) {
       event.preventDefault()
       return
@@ -802,21 +803,21 @@ export default function App() {
       return
     }
     event.dataTransfer.effectAllowed = 'copy'
-    event.dataTransfer.setData('text/plain', 'upset')
+    event.dataTransfer.setData('text/plain', type)
     event.dataTransfer.setDragImage(node, node.clientWidth / 2, node.clientHeight / 2)
-    setPaletteDrag({ width: node.clientWidth, height: node.clientHeight, hotX: node.clientWidth / 2, hotY: node.clientHeight / 2 })
+    setPaletteDrag({ width: node.clientWidth, height: node.clientHeight, hotX: node.clientWidth / 2, hotY: node.clientHeight / 2, face: type })
   }
 
   function handleFaceDragEnd() {
     setPaletteDrag(null)
   }
 
-  const handleDropFace = useCallback((time: number) => {
+  const handleDropFace = useCallback((time: number, face: FaceType) => {
     setDrops(current => {
       const duration = track?.duration
       if (duration == null || dropBlocked(time, duration, current)) return current
       dropId.current += 1
-      return [...current, { id: dropId.current, start: time, end: Math.min(time + DROP_SECONDS, duration), face: 'upset' }]
+      return [...current, { id: dropId.current, start: time, end: Math.min(time + DROP_SECONDS, duration), face }]
     })
   }, [track])
 
@@ -842,7 +843,8 @@ export default function App() {
     })
   }
 
-  const previewFace = faceAtTime(playbackTime, drops)
+  const previewFace = track ? faceAtTime(playbackTime, drops) : face
+  const faceSetLock = track ? 'Só funciona sem áudio carregado' : ''
   const eyeOverlay = eyeUrl(previewFace, playbackTime)
 
   return (
@@ -874,18 +876,27 @@ export default function App() {
           </Button>
           <Box sx={{ flex: 1 }} />
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexShrink: 0 }}>
-            <Typography aria-label="Nome da imagem">{faceNames[previewFace][faceLevel]}</Typography>
-            <Button variant="outlined" aria-label="Próxima imagem" sx={{ minWidth: 40 }} onClick={() => {
-              const indices = faces[face].flatMap((url, index) => url ? [index] : [])
-              setFaceLevel(current => indices[(indices.indexOf(current) + 1) % indices.length] ?? 0)
-            }}>+</Button>
+            {!track && <Typography aria-label="Nome da imagem">{faceNames[previewFace][faceLevel]}</Typography>}
+            <Tooltip title={faceSetLock}>
+              <Box component="span" sx={{ display: 'inline-flex' }}>
+                <Button variant="outlined" aria-label="Próxima imagem" disabled={Boolean(track)} sx={{ minWidth: 40 }} onClick={() => {
+                  const indices = faces[face].flatMap((url, index) => url ? [index] : [])
+                  setFaceLevel(current => indices[(indices.indexOf(current) + 1) % indices.length] ?? 0)
+                }}>+</Button>
+              </Box>
+            </Tooltip>
           </Stack>
-          <FormControl component="fieldset" sx={{ flexShrink: 0 }}>
-            <RadioGroup row name="face-set" value={face} onChange={(_, value) => { if (isFaceType(value)) setFace(value) }} aria-label="Conjunto de faces">
-              <FormControlLabel value="normal" control={<Radio size="small" />} label="Normal" />
-              <FormControlLabel value="upset" control={<Radio size="small" />} label="Upset" />
-            </RadioGroup>
-          </FormControl>
+          <Tooltip title={faceSetLock}>
+            <Box component="span" sx={{ display: 'inline-flex', flexShrink: 0 }}>
+              <FormControl component="fieldset" disabled={Boolean(track)}>
+                <RadioGroup row name="face-set" value={face} onChange={(_, value) => { if (isFaceType(value)) setFace(value) }} aria-label="Conjunto de faces">
+                  <FormControlLabel value="normal" control={<Radio size="small" />} label="Normal" />
+                  <FormControlLabel value="upset" control={<Radio size="small" />} label="Upset" />
+                  <FormControlLabel value="sad" control={<Radio size="small" />} label="Sad" />
+                </RadioGroup>
+              </FormControl>
+            </Box>
+          </Tooltip>
         </Stack>
         {error && <Alert severity="error" sx={{ mx: 2, mb: 2 }}>{error}</Alert>}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
@@ -897,20 +908,23 @@ export default function App() {
               </Box>
             </Box>
           </Box>
-          <Box component="aside" aria-label="Opções de face" sx={{ width: 89, flexShrink: 0, bgcolor: '#2a2a2a', px: '20px', py: 1.25, overflow: 'auto' }}>
-            <Box
-              draggable={Boolean(track)}
-              onDragStart={handleFaceDragStart}
-              onDragEnd={handleFaceDragEnd}
-              aria-label="Face upset, boca fechada"
-              sx={{ width: '100%', aspectRatio: '1', borderRadius: '12px', bgcolor: '#c0c0c0', overflow: 'hidden', cursor: 'default', position: 'relative', opacity: track ? 1 : 0.45 }}
-            >
-              <FaceThumb mouth={faces.upset[0]} eye={eyes.upset.open} />
-            </Box>
+          <Box component="aside" aria-label="Opções de face" sx={{ width: 89, flexShrink: 0, bgcolor: '#2a2a2a', px: '20px', py: 1.25, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+            {PALETTE_FACES.map(type => (
+              <Box
+                key={type}
+                draggable={Boolean(track)}
+                onDragStart={event => handleFaceDragStart(event, type)}
+                onDragEnd={handleFaceDragEnd}
+                aria-label={`Face ${type}, boca fechada`}
+                sx={{ width: '100%', aspectRatio: '1', flexShrink: 0, borderRadius: '12px', bgcolor: '#c0c0c0', overflow: 'hidden', cursor: 'default', position: 'relative', opacity: track ? 1 : 0.45 }}
+              >
+                <FaceThumb mouth={faces[type][0]} eye={eyes[type].open} />
+              </Box>
+            ))}
           </Box>
         </Box>
         <Box component="section" aria-label="Área de áudio" sx={{ width: '100%', flexShrink: 0, pt: 2.5 }}>
-          <AudioPlayer key={track?.id ?? 'empty'} track={track} drops={drops} paletteDrag={paletteDrag} mouth={faces.upset[0]} eye={eyes.upset.open} onRemove={removeAudio} onLevelChange={setFaceLevel} onTimeChange={setPlaybackTime} onDropFace={handleDropFace} onRemoveDrop={handleRemoveDrop} onMoveDrop={handleMoveDrop} onResizeDrop={handleResizeDrop} />
+          <AudioPlayer key={track?.id ?? 'empty'} track={track} drops={drops} paletteDrag={paletteDrag} onRemove={removeAudio} onLevelChange={setFaceLevel} onTimeChange={setPlaybackTime} onDropFace={handleDropFace} onRemoveDrop={handleRemoveDrop} onMoveDrop={handleMoveDrop} onResizeDrop={handleResizeDrop} />
         </Box>
       </Box>
       <Dialog open={exportOpen} onClose={closeExportDialog} aria-labelledby={exporting ? 'processing-title' : 'export-size-title'}>
