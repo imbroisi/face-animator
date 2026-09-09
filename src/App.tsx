@@ -20,6 +20,7 @@ const WAVEFORM_PEAK = '#508fc5'
 const PLAYHEAD = '#29a7ff'
 const PLAYHEAD_HANDLE = 22
 const EDGE_HIT = 2
+const EDGE_OUTSIDE = 3
 const MOVE_THRESHOLD = 6
 const MIN_DROP = 0.5
 const SELECT_ORANGE = '#ffd56a'
@@ -538,25 +539,38 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, mouth, eye, onRem
               zIndex: 1, cursor: 'default',
               pointerEvents: paletteDrag ? 'none' : 'auto', touchAction: 'none', userSelect: 'none',
             }}
-          >
-            <Box
-              onPointerDown={event => handleEdgePointerDown(event, drop, 'start')}
-              onPointerMove={handleEdgePointerMove}
-              onPointerUp={handlePinPointerUp}
-              onPointerCancel={handlePinPointerUp}
-              onLostPointerCapture={handlePinPointerUp}
-              sx={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${EDGE_HIT}px`, cursor: CURSOR_LEFT, zIndex: 2 }}
-            />
-            <Box
-              onPointerDown={event => handleEdgePointerDown(event, drop, 'end')}
-              onPointerMove={handleEdgePointerMove}
-              onPointerUp={handlePinPointerUp}
-              onPointerCancel={handlePinPointerUp}
-              onLostPointerCapture={handlePinPointerUp}
-              sx={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: `${EDGE_HIT}px`, cursor: CURSOR_RIGHT, zIndex: 2 }}
-            />
-          </Box>
+          />
         ))}
+        {loadedTrack && total > 0 && drops.flatMap(drop => ([
+          <Box
+            key={`edge-start-${drop.id}`}
+            onPointerDown={event => handleEdgePointerDown(event, drop, 'start')}
+            onPointerMove={handleEdgePointerMove}
+            onPointerUp={handlePinPointerUp}
+            onPointerCancel={handlePinPointerUp}
+            onLostPointerCapture={handlePinPointerUp}
+            sx={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `calc(${drop.start / total * 100}% - ${EDGE_OUTSIDE}px)`,
+              width: `${EDGE_HIT + EDGE_OUTSIDE}px`, cursor: CURSOR_LEFT, zIndex: 3,
+              pointerEvents: paletteDrag ? 'none' : 'auto', touchAction: 'none',
+            }}
+          />,
+          <Box
+            key={`edge-end-${drop.id}`}
+            onPointerDown={event => handleEdgePointerDown(event, drop, 'end')}
+            onPointerMove={handleEdgePointerMove}
+            onPointerUp={handlePinPointerUp}
+            onPointerCancel={handlePinPointerUp}
+            onLostPointerCapture={handlePinPointerUp}
+            sx={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `calc(${drop.end / total * 100}% - ${EDGE_HIT}px)`,
+              width: `${EDGE_HIT + EDGE_OUTSIDE}px`, cursor: CURSOR_RIGHT, zIndex: 3,
+              pointerEvents: paletteDrag ? 'none' : 'auto', touchAction: 'none',
+            }}
+          />,
+        ]))}
       </Box>
       <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
         <Box aria-hidden="true" sx={{ position: 'absolute', top: PLAYHEAD_HANDLE, bottom: 0, left: `clamp(0px, ${progress * 100}%, calc(100% - 2px))`, width: '2px', bgcolor: PLAYHEAD }} />
