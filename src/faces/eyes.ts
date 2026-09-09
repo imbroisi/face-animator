@@ -5,10 +5,9 @@ export const EYE_OPEN_TIME_SHORT_PERCENT = 0.25 // percent com eye-open.
 export const EYE_CLOSE_TIME = 0.15 // segundos com eye-close.
 // ========================================================
 
-export type EyeState = 'open' | 'close'
+import { FACE_TYPES, type FaceType } from './Faces'
 
-const TYPES = ['normal'] as const
-type FaceType = (typeof TYPES)[number]
+export type EyeState = 'open' | 'close'
 
 const eyeImages = import.meta.glob<string>('./**/eye-*.png', {
   eager: true,
@@ -17,10 +16,13 @@ const eyeImages = import.meta.glob<string>('./**/eye-*.png', {
 })
 
 export const eyes = Object.fromEntries(
-  TYPES.map((type) => [type, {
-    open: eyeImages[`./${type}/eye-open.png`] ?? '',
-    close: eyeImages[`./${type}/eye-close.png`] ?? '',
-  }]),
+  FACE_TYPES.map((type) => {
+    const open = eyeImages[`./${type}/eye-open.png`] ?? ''
+    return [type, {
+      open,
+      close: eyeImages[`./${type}/eye-close.png`] ?? open,
+    }]
+  }),
 ) as Record<FaceType, Record<EyeState, string>>
 
 const cycles: { start: number; open: number }[] = []

@@ -1,6 +1,11 @@
-const TYPES = ['normal'] as const;
+const TYPES = ['normal', 'upset'] as const;
 
-type FaceType = (typeof TYPES)[number];
+export type FaceType = (typeof TYPES)[number];
+export const FACE_TYPES = TYPES;
+
+export function isFaceType(value: string): value is FaceType {
+  return (TYPES as readonly string[]).includes(value);
+}
 
 const MOUTHS = ['mouth-close.png', 'mouth-semi.png', 'mouth-open.png'] as const;
 
