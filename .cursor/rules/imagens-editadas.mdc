@@ -1,0 +1,23 @@
+---
+description: Imagens geradas a partir de um original devem ir para o mesmo diretório
+alwaysApply: true
+---
+
+# Imagens editadas
+
+Quando o usuário anexar ou apontar uma imagem original e pedir uma variação gerada:
+
+- Depois de gerar, copie o resultado para o **mesmo diretório do arquivo original** (não deixe só em `~/.cursor/projects/.../assets/`)
+- Mantenha a **mesma resolução** do original (largura × altura em pixels). Se a geração sair menor, recorte e composite no original em vez de reexportar o cenário inteiro em baixa
+- Use um nome descritivo ao lado do original, sem sobrescrever o original
+- Informe o path final no disco, não o path temporário do Cursor
+
+## Limite de capacidade e controle de qualidade
+
+- Um cenário deve parecer real e fisicamente coerente como um todo. Nada pode ser aprovado ou entregue se quebrar essa impressão de realidade, mesmo que o defeito não esteja na área principal do pedido
+- Não entregue uma imagem só para cumprir o pedido. Se a técnica ou as ferramentas disponíveis não permitirem um resultado convincente, informe claramente a limitação e pare
+- Antes de entregar, inspecione a imagem completa e ampliações das áreas editadas. Rejeite o resultado se houver recortes, halos, retângulos, duplicações, resíduos, deformações ou elementos estranhos
+- Um objeto inserido deve ter perspectiva, escala, nitidez, iluminação, sombra de contato e apoio físico compatíveis com a cena
+- Não amplie um recorte de baixa resolução e o apresente como objeto adequado a uma cena 4K. Se não houver detalhe suficiente, peça ou gere uma fonte em resolução apropriada
+- Ao remover ou substituir um objeto, reconstrua de forma contínua a textura, a luz e as sombras do fundo; não aceite preenchimentos planos ou manchas visíveis
+- Se a inspeção revelar um defeito sem correção confiável, não salve nem apresente o arquivo como final

@@ -1,12 +1,13 @@
 import { exportMov } from './export/exportMov'
 import { isMovOutputSize, readMovOutputSize, writeMovOutputSize, type MovOutputSize } from './export/movSize'
 import { flushSync } from 'react-dom'
-import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react'
 import { prepareAudio } from './audio/prepareAudio'
 import { buildMouthCycles, cycleFaceAt } from './audio/mouthCycles'
 import type { MouthTimeline } from './audio/mouthCycles'
 import { FACE_TYPES, faces, faceNames, isFaceType, type FaceType } from './faces/Faces'
 import { eyes, eyeUrl } from './faces/eyes'
+import tennisBall from './faces/bola-tenis.png'
 import { Alert, Box, Button, CssBaseline, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, IconButton, LinearProgress, Radio, RadioGroup, Stack, SvgIcon, ThemeProvider, Tooltip, Typography, createTheme } from '@mui/material'
 
 const theme = createTheme({ palette: { mode: 'dark', background: { default: '#222222' }, primary: { main: '#58a6e7' } } })
@@ -31,6 +32,46 @@ const CURSOR_RIGHT = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="
 
 type FaceDrop = { id: number; start: number; end: number; face: FaceType }
 type PaletteDrag = { width: number; height: number; hotX: number; hotY: number; face: FaceType }
+
+const PREVIEW_SIZES = {
+  grande: { width: 108, height: 150 },
+  pequeno: { width: 65, height: 90 },
+} as const
+
+type PreviewSize = keyof typeof PREVIEW_SIZES
+
+const BALL_GRANDE = 200
+const BALL_GAP = 100
+const PREVIEW_LAYOUT_KEY = 'preview-layout'
+
+function isPreviewSize(value: unknown): value is PreviewSize {
+  return value === 'grande' || value === 'pequeno'
+}
+
+function ballDiameter(size: PreviewSize) {
+  return Math.round(BALL_GRANDE * PREVIEW_SIZES[size].height / PREVIEW_SIZES.grande.height)
+}
+
+function readPreviewLayout(): { previewSize: PreviewSize; ball: { x: number; y: number } } | null {
+  try {
+    const raw = localStorage.getItem(PREVIEW_LAYOUT_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as { previewSize?: unknown; ball?: { x?: unknown; y?: unknown } }
+    if (!isPreviewSize(data.previewSize)) return null
+    const x = data.ball?.x
+    const y = data.ball?.y
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return null
+    return { previewSize: data.previewSize, ball: { x, y } }
+  } catch {
+    return null
+  }
+}
+
+function writePreviewLayout(previewSize: PreviewSize, ball: { x: number; y: number }) {
+  try {
+    localStorage.setItem(PREVIEW_LAYOUT_KEY, JSON.stringify({ previewSize, ball }))
+  } catch { /* ignore quota / private mode */ }
+}
 
 // 'normal' é a face padrão da trilha, então não aparece na paleta.
 const PALETTE_FACES = FACE_TYPES.filter(type => type !== 'normal')
@@ -673,6 +714,14 @@ function downloadMov(blob: Blob, name: string) {
 export default function App() {
   const [face, setFace] = useState<FaceType>('normal')
   const [faceLevel, setFaceLevel] = useState(0)
+  const [previewSize, setPreviewSize] = useState<PreviewSize>(() => readPreviewLayout()?.previewSize ?? 'grande')
+  const [ballPos, setBallPos] = useState(() => readPreviewLayout()?.ball ?? { x: 0, y: 0 })
+  const previewRef = useRef<HTMLDivElement>(null)
+  const sizePanelRef = useRef<HTMLDivElement>(null)
+  const ballDrag = useRef<{ pointer: number; x: number; y: number; left: number; top: number } | null>(null)
+  const ballNode = useRef<HTMLImageElement>(null)
+  const ballPlaced = useRef(readPreviewLayout() != null)
+  const prevBallSize = useRef(ballDiameter(readPreviewLayout()?.previewSize ?? 'grande'))
   const [playbackTime, setPlaybackTime] = useState(0)
   const [exporting, setExporting] = useState(false)
   const [savePercent, setSavePercent] = useState(0)
@@ -846,6 +895,103 @@ export default function App() {
   const previewFace = track ? faceAtTime(playbackTime, drops) : face
   const faceSetLock = track ? 'Só funciona sem áudio carregado' : ''
   const eyeOverlay = eyeUrl(previewFace, playbackTime)
+  const previewBox = PREVIEW_SIZES[previewSize]
+  const ballSize = ballDiameter(previewSize)
+
+  useLayoutEffect(() => {
+    const preview = previewRef.current
+    const panel = sizePanelRef.current
+    if (!ballPlaced.current) {
+      if (!preview || !panel) return
+      const area = preview.getBoundingClientRect()
+      const box = panel.getBoundingClientRect()
+      const x = box.right - area.left - ballSize
+      const y = box.top - area.top - BALL_GAP - ballSize
+      setBallPos({ x: Math.max(0, x), y: Math.max(0, y) })
+      ballPlaced.current = true
+      prevBallSize.current = ballSize
+      return
+    }
+    const previous = prevBallSize.current
+    if (previous === ballSize) return
+    const shift = (ballSize - previous) / 2
+    setBallPos(pos => {
+      const area = previewRef.current
+      const x = pos.x - shift
+      const y = pos.y - shift
+      if (!area) return { x, y }
+      return {
+        x: Math.max(0, Math.min(area.clientWidth - ballSize, x)),
+        y: Math.max(0, Math.min(area.clientHeight - ballSize, y)),
+      }
+    })
+    prevBallSize.current = ballSize
+  }, [ballSize])
+
+  useEffect(() => {
+    if (!ballPlaced.current) return
+    writePreviewLayout(previewSize, ballPos)
+  }, [previewSize, ballPos])
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.altKey || event.ctrlKey || event.metaKey) return
+      const target = event.target
+      if (target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) return
+      if (target instanceof HTMLInputElement && target.type !== 'radio' && target.type !== 'checkbox' && target.type !== 'button') return
+      const delta = event.key === 'ArrowLeft' ? { x: -1, y: 0 }
+        : event.key === 'ArrowRight' ? { x: 1, y: 0 }
+        : event.key === 'ArrowUp' ? { x: 0, y: -1 }
+        : event.key === 'ArrowDown' ? { x: 0, y: 1 }
+        : null
+      if (!delta) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      const preview = previewRef.current
+      if (!preview) return
+      setBallPos(pos => ({
+        x: Math.max(0, Math.min(preview.clientWidth - ballSize, pos.x + delta.x)),
+        y: Math.max(0, Math.min(preview.clientHeight - ballSize, pos.y + delta.y)),
+      }))
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [ballSize])
+
+  function endBallDrag(pointerId: number) {
+    if (ballDrag.current?.pointer !== pointerId) return
+    ballDrag.current = null
+    const node = ballNode.current
+    if (node?.hasPointerCapture(pointerId)) node.releasePointerCapture(pointerId)
+  }
+
+  function handleBallPointerDown(event: PointerEvent<HTMLImageElement>) {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    ballDrag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, left: ballPos.x, top: ballPos.y }
+  }
+
+  function handleBallPointerMove(event: PointerEvent<HTMLImageElement>) {
+    const drag = ballDrag.current
+    if (!drag || drag.pointer !== event.pointerId) return
+    if ((event.buttons & 1) === 0) {
+      endBallDrag(event.pointerId)
+      return
+    }
+    const preview = previewRef.current
+    if (!preview) return
+    const nextX = drag.left + event.clientX - drag.x
+    const nextY = drag.top + event.clientY - drag.y
+    setBallPos({
+      x: Math.max(0, Math.min(preview.clientWidth - ballSize, nextX)),
+      y: Math.max(0, Math.min(preview.clientHeight - ballSize, nextY)),
+    })
+  }
+
+  function handleBallPointerUp(event: PointerEvent<HTMLImageElement>) {
+    endBallDrag(event.pointerId)
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -900,12 +1046,91 @@ export default function App() {
         </Stack>
         {error && <Alert severity="error" sx={{ mx: 2, mb: 2 }}>{error}</Alert>}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', bgcolor: '#c0c0c0' }}>
-            <Box sx={{ position: 'absolute', inset: 0, p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Box sx={{ position: 'relative', display: 'inline-block', lineHeight: 0 }}>
-                <Box component="img" src={faces[previewFace][faceLevel]} alt="Boca" sx={{ display: 'block', width: 'auto', height: 'auto', maxWidth: 'none', flexShrink: 0, objectFit: 'contain' }} />
-                {eyeOverlay && <Box component="img" src={eyeOverlay} alt="" sx={{ position: 'absolute', inset: 0, m: 'auto', display: 'block', width: 'auto', height: 'auto', maxWidth: 'none', pointerEvents: 'none' }} />}
+          <Box ref={previewRef} sx={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', bgcolor: '#c0c0c0' }}>
+            <Box
+              ref={ballNode}
+              component="img"
+              src={tennisBall}
+              alt=""
+              draggable={false}
+              aria-label="Bola"
+              onPointerDown={handleBallPointerDown}
+              onPointerMove={handleBallPointerMove}
+              onPointerUp={handleBallPointerUp}
+              onPointerCancel={handleBallPointerUp}
+              onLostPointerCapture={handleBallPointerUp}
+              sx={{
+                position: 'absolute',
+                left: ballPos.x,
+                top: ballPos.y,
+                width: ballSize,
+                height: ballSize,
+                objectFit: 'contain',
+                zIndex: 1,
+                cursor: 'grab',
+                touchAction: 'none',
+                userSelect: 'none',
+                '&:active': { cursor: 'grabbing' },
+              }}
+            />
+            <Box sx={{ position: 'absolute', inset: 0, p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 2 }}>
+              <Box sx={{ position: 'relative', width: previewBox.width, height: previewBox.height, flexShrink: 0 }}>
+                <Box
+                  component="img"
+                  src={faces[previewFace][faceLevel]}
+                  alt="Boca"
+                  sx={{ display: 'block', width: previewBox.width, height: previewBox.height, objectFit: 'contain' }}
+                />
+                {eyeOverlay && <Box component="img" src={eyeOverlay} alt="" sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', objectFit: 'contain' }} />}
               </Box>
+            </Box>
+            <Box
+              ref={sizePanelRef}
+              sx={{
+                position: 'absolute', right: 12, bottom: 12, zIndex: 3,
+                minWidth: 132,
+                bgcolor: 'rgba(26, 26, 26, 0.94)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                px: 1.5, pt: 1, pb: 1,
+                borderRadius: 1.5,
+              }}
+            >
+              <FormControl>
+              <Typography
+                id="preview-size-label"
+                sx={{
+                  display: 'block',
+                  mb: 0.75,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  color: 'text.secondary',
+                }}
+              >
+                tamanho
+              </Typography>
+              <RadioGroup
+                name="preview-size"
+                value={previewSize}
+                onChange={(_, value) => { if (value === 'grande' || value === 'pequeno') setPreviewSize(value) }}
+                aria-labelledby="preview-size-label"
+                sx={{ gap: 0.25 }}
+              >
+                <FormControlLabel
+                  value="grande"
+                  control={<Radio size="small" />}
+                  label="grande"
+                  sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 13, lineHeight: 1.2 }, '& .MuiRadio-root': { py: 0.35, pl: 0.25, pr: 0.75 } }}
+                />
+                <FormControlLabel
+                  value="pequeno"
+                  control={<Radio size="small" />}
+                  label="pequeno"
+                  sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 13, lineHeight: 1.2 }, '& .MuiRadio-root': { py: 0.35, pl: 0.25, pr: 0.75 } }}
+                />
+              </RadioGroup>
+              </FormControl>
             </Box>
           </Box>
           <Box component="aside" aria-label="Opções de face" sx={{ width: 89, flexShrink: 0, bgcolor: '#2a2a2a', px: '20px', py: 1.25, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.25 }}>
