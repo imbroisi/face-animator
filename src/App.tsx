@@ -8,7 +8,7 @@ import type { MouthTimeline } from './audio/mouthCycles'
 import { FACE_TYPES, faces, faceNames, isFaceType, type FaceType } from './faces/Faces'
 import { eyes, eyeUrl } from './faces/eyes'
 import tennisBall from './faces/bola-tenis.png'
-import { Alert, Box, Button, CssBaseline, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, IconButton, LinearProgress, Radio, RadioGroup, Stack, SvgIcon, ThemeProvider, Tooltip, Typography, createTheme } from '@mui/material'
+import { Alert, Box, Button, CssBaseline, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, IconButton, LinearProgress, Radio, RadioGroup, Stack, SvgIcon, ThemeProvider, Tooltip, Typography, createTheme } from '@mui/material'
 
 const theme = createTheme({ palette: { mode: 'dark', background: { default: '#222222' }, primary: { main: '#58a6e7' } } })
 
@@ -537,11 +537,43 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, onRemove, onLevel
 
   return <>
     <audio ref={audioRef} preload="auto" onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); onLevelChange(0) }} onTimeUpdate={(event) => syncPosition(event.currentTarget.currentTime)} />
-    <Box sx={{ display: 'flex', gap: 2, px: 2, mb: 1, fontVariantNumeric: 'tabular-nums' }}>
-      <Typography component="span" variant="body2" sx={{ fontSize: '1.3125rem' }} aria-label="Tempo atual"><TimeDisplay seconds={position} /></Typography>
-      <Typography component="span" variant="body2" sx={{ fontSize: '1.3125rem', color: '#909090' }} aria-label="Tempo total"><TimeDisplay seconds={total} /></Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', px: 1, py: 0.75 }}>
+      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, fontVariantNumeric: 'tabular-nums', minWidth: 0 }}>
+        <Typography component="span" variant="body2" sx={{ fontSize: '1.3125rem' }} aria-label="Tempo atual"><TimeDisplay seconds={position} /></Typography>
+        <Typography component="span" variant="body2" sx={{ fontSize: '1.3125rem', color: '#909090' }} aria-label="Tempo total"><TimeDisplay seconds={total} /></Typography>
+      </Box>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexShrink: 0 }}>
+        <Tooltip title="Recuar 1 quadro">
+          <span>
+            <IconButton disabled={!loadedTrack} onClick={() => stepFrame(-1)} aria-label="Recuar 1 quadro">
+              <SvgIcon><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></SvgIcon>
+            </IconButton>
+          </span>
+        </Tooltip>
+        <IconButton disabled={!loadedTrack} onClick={() => void togglePlayback()} aria-label={playing ? 'Pausar áudio' : 'Reproduzir áudio'}>
+          <SvgIcon>{playing ? <path d="M6 5h4v14H6zm8 0h4v14h-4z" /> : <path d="M8 5v14l11-7z" />}</SvgIcon>
+        </IconButton>
+        <Tooltip title="Avançar 1 quadro">
+          <span>
+            <IconButton disabled={!loadedTrack} onClick={() => stepFrame(1)} aria-label="Avançar 1 quadro">
+              <SvgIcon><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></SvgIcon>
+            </IconButton>
+          </span>
+        </Tooltip>
+        <IconButton disabled={!loadedTrack} onClick={stopPlayback} aria-label="Parar e voltar ao início">
+          <SvgIcon><path d="M6 6h12v12H6z" /></SvgIcon>
+        </IconButton>
+      </Stack>
+      <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+        <Tooltip title="Remover áudio">
+          <IconButton aria-label="Remover áudio" onClick={onRemove} disabled={!loadedTrack}>
+            <SvgIcon><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm3-9h2v8H9v-8zm4 0h2v8h-2v-8zM15.5 4l-1-1h-5l-1 1H5v2h14V4z" /></SvgIcon>
+          </IconButton>
+        </Tooltip>
+      </Box>
     </Box>
-    <Box sx={{ position: 'relative' }}>
+    <Divider sx={{ mx: '12px', borderColor: 'rgba(255,255,255,0.12)' }} />
+    <Box sx={{ position: 'relative', m: '12px' }}>
       <Box
         onPointerDown={handleWavePointerDown}
         onPointerUp={handlePlayheadPointerUp}
@@ -663,34 +695,6 @@ function AudioPlayer({ track: loadedTrack, drops, paletteDrag, onRemove, onLevel
         />
       </Box>
     </Box>
-    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', px: 1, py: 1 }}>
-      <Tooltip title="Recuar 1 quadro">
-        <span>
-          <IconButton disabled={!loadedTrack} onClick={() => stepFrame(-1)} aria-label="Recuar 1 quadro">
-            <SvgIcon><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></SvgIcon>
-          </IconButton>
-        </span>
-      </Tooltip>
-      <IconButton disabled={!loadedTrack} onClick={() => void togglePlayback()} aria-label={playing ? 'Pausar áudio' : 'Reproduzir áudio'}>
-        <SvgIcon>{playing ? <path d="M6 5h4v14H6zm8 0h4v14h-4z" /> : <path d="M8 5v14l11-7z" />}</SvgIcon>
-      </IconButton>
-      <Tooltip title="Avançar 1 quadro">
-        <span>
-          <IconButton disabled={!loadedTrack} onClick={() => stepFrame(1)} aria-label="Avançar 1 quadro">
-            <SvgIcon><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></SvgIcon>
-          </IconButton>
-        </span>
-      </Tooltip>
-      <IconButton disabled={!loadedTrack} onClick={stopPlayback} aria-label="Parar e voltar ao início">
-        <SvgIcon><path d="M6 6h12v12H6z" /></SvgIcon>
-      </IconButton>
-      <Box sx={{ flex: 1 }} />
-      <Tooltip title="Remover áudio">
-        <IconButton aria-label="Remover áudio" onClick={onRemove} disabled={!loadedTrack}>
-          <SvgIcon><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm3-9h2v8H9v-8zm4 0h2v8h-2v-8zM15.5 4l-1-1h-5l-1 1H5v2h14V4z" /></SvgIcon>
-        </IconButton>
-      </Tooltip>
-    </Stack>
     {playError && <Alert severity="error" sx={{ mx: 2, mt: 1 }}>{playError}</Alert>}
   </>
 }
@@ -1039,6 +1043,7 @@ export default function App() {
                   <FormControlLabel value="normal" control={<Radio size="small" />} label="Normal" />
                   <FormControlLabel value="upset" control={<Radio size="small" />} label="Upset" />
                   <FormControlLabel value="sad" control={<Radio size="small" />} label="Sad" />
+                  <FormControlLabel value="suspeitando" control={<Radio size="small" />} label="Suspeitando" />
                 </RadioGroup>
               </FormControl>
             </Box>
@@ -1148,7 +1153,7 @@ export default function App() {
             ))}
           </Box>
         </Box>
-        <Box component="section" aria-label="Área de áudio" sx={{ width: '100%', flexShrink: 0, pt: 2.5 }}>
+        <Box component="section" aria-label="Área de áudio" sx={{ width: '100%', flexShrink: 0, pt: 0.5 }}>
           <AudioPlayer key={track?.id ?? 'empty'} track={track} drops={drops} paletteDrag={paletteDrag} onRemove={removeAudio} onLevelChange={setFaceLevel} onTimeChange={setPlaybackTime} onDropFace={handleDropFace} onRemoveDrop={handleRemoveDrop} onMoveDrop={handleMoveDrop} onResizeDrop={handleResizeDrop} />
         </Box>
       </Box>
