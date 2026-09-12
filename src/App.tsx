@@ -1043,7 +1043,7 @@ export default function App() {
                   <FormControlLabel value="normal" control={<Radio size="small" />} label="Normal" />
                   <FormControlLabel value="upset" control={<Radio size="small" />} label="Upset" />
                   <FormControlLabel value="sad" control={<Radio size="small" />} label="Sad" />
-                  <FormControlLabel value="suspeitando" control={<Radio size="small" />} label="Suspeitando" />
+                  <FormControlLabel value="suspicious" control={<Radio size="small" />} label="Suspicious" />
                 </RadioGroup>
               </FormControl>
             </Box>

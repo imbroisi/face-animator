@@ -1,4 +1,4 @@
-const TYPES = ['normal', 'upset', 'sad', 'suspeitando'] as const;
+const TYPES = ['normal', 'upset', 'sad', 'suspicious'] as const;
 
 export type FaceType = (typeof TYPES)[number];
 export const FACE_TYPES = TYPES;
