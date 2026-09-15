@@ -1,0 +1,35 @@
+---
+description: React SPA — SRP, pastas e identificadores em inglês
+alwaysApply: true
+---
+
+# React SPA
+
+Aplicar quando `package.json` tiver `react` e não for Next App Router (aí não forçar fetch de SPA).
+
+## Airbnb React
+
+Seguir o guia React da Airbnb **exceto**: PropTypes, `.jsx` obrigatório, `defaultProps` e class components. TypeScript e `.tsx` no lugar. Prefira `jsx-a11y` a regras mortas.
+
+## Single responsibility
+
+Cada componente, hook ou módulo: **um motivo para mudar**. Separar UI, I/O e regra quando mudam independente. Não criar arquivo só para um JSX de 10 linhas usado uma vez. Não existe `src/hooks/` nem `src/context/` globais.
+
+## Pastas
+
+```
+src/components/<domain>/NomeDoComponente/
+  index.tsx              # só reexporta
+  NomeDoComponente.tsx   # implementação (sempre os dois)
+  NomeDoComponente.module.scss
+  NomeDoComponente.test.tsx
+  useAlgo.ts             # hook deste ramo
+```
+
+Motor/asset fora de `components/` (`src/audio/`, `src/export/`, `src/faces/`). `components/shared/` só peça de 2+ domínios.
+
+Hook/context na pasta do componente (ou do domínio UI). `shared/` excepcional.
+
+## Inglês
+
+Identificadores, arquivos e pastas em inglês. Copy de UI pode ser português. Não usar `functions.ts`/`types.ts` gaveta — nomeie pelo domínio (`dropGeometry.ts`).

@@ -1,0 +1,1 @@
+export { FacePalette } from './FacePalette';

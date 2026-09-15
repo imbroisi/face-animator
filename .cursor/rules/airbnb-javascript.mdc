@@ -1,0 +1,27 @@
+---
+description: JavaScript/TypeScript no padrão Airbnb
+globs: "**/*.{js,mjs,cjs,ts,tsx,jsx}"
+alwaysApply: true
+---
+
+# JavaScript Airbnb
+
+Ao criar ou editar JS/TS/JSX/TSX, seguir o [Airbnb JavaScript Style Guide](https://github.com/airbnb/javascript) (e a seção React). TypeScript: mesma regra, em `.ts`/`.tsx`; tipos no lugar de PropTypes.
+
+Checar `package.json` se o repo for JS. Next.js não dispensa o estilo; só não forçar hábitos de SPA (fetch no client) em App Router.
+
+## Obrigatório
+
+- `;` no fim de todo statement (import, const, return, `type`/`export type`)
+- aspas simples em JS/TS; aspas duplas em JSX
+- 2 espaços; vírgula final em multilinha; `const`/`let` (nunca `var`)
+- `===` (nunca `==`, salvo `== null` se o lint permitir)
+- parênteses em arrow: `(x) => x`
+- `one-var`: um `const`/`let` por declaração
+- objetos: shorthand; strings dinâmicas: template literal
+- `++` só no afterthought de `for`
+- sem ternário aninhado; não reatribuir propriedades de parâmetro
+
+Não aplicar a bash, CSS, JSON nem a tags JSX em si.
+
+Arquitetura, pastas e SRP: ver `react-spa.mdc`.

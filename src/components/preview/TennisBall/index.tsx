@@ -1,0 +1,1 @@
+export { TennisBall } from './TennisBall';
