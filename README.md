@@ -3,6 +3,8 @@
 Estrutura inicial com React 19, Vite, TypeScript, MUI, ESLint, Husky e lint-staged.
 Permite carregar um arquivo de áudio local e visualizar sua forma de onda mono em toda a largura da janela. O botão de remover limpa o áudio carregado, sem alterar o arquivo original. Inclui play/pause e um indicador de posição da reprodução. Não há corte ou edição do áudio.
 
+O aplicativo publicado está em [https://imbroisi.github.io/face-animator/](https://imbroisi.github.io/face-animator/). O GitHub Pages atualiza essa URL a cada push em `main`.
+
 ## Desenvolvimento
 
 ```sh
