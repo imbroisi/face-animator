@@ -47,6 +47,8 @@ function ffmpegCoreAssets(): Plugin {
 }
 
 export default defineConfig({
+  // Project Pages lives at /face-animator/; local dev stays on /.
+  base: process.env.GITHUB_PAGES === '1' ? '/face-animator/' : '/',
   plugins: [react(), exportMovPlugin(), ffmpegCoreAssets()],
   optimizeDeps: {
     exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
