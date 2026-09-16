@@ -41,6 +41,7 @@ export function PreviewStage({
   const ballSize = ballDiameter(previewSize);
 
   useLayoutEffect(() => {
+    if (!import.meta.env.DEV) return;
     const preview = previewRef.current;
     const panel = sizePanelRef.current;
     if (!ballPlaced.current) {
@@ -71,11 +72,12 @@ export function PreviewStage({
   }, [ballSize]);
 
   useEffect(() => {
-    if (!ballPlaced.current) return;
+    if (!import.meta.env.DEV || !ballPlaced.current) return;
     writePreviewLayout(previewSize, ballPos);
   }, [previewSize, ballPos]);
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return undefined;
     function onKeyDown(event: KeyboardEvent) {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target;
@@ -148,16 +150,18 @@ export function PreviewStage({
       ref={previewRef}
       sx={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', bgcolor: '#c0c0c0' }}
     >
-      <TennisBall
-        src={tennisBall}
-        size={ballSize}
-        x={ballPos.x}
-        y={ballPos.y}
-        ballRef={ballNode}
-        onPointerDown={handleBallPointerDown}
-        onPointerMove={handleBallPointerMove}
-        onPointerUp={handleBallPointerUp}
-      />
+      {import.meta.env.DEV && (
+        <TennisBall
+          src={tennisBall}
+          size={ballSize}
+          x={ballPos.x}
+          y={ballPos.y}
+          ballRef={ballNode}
+          onPointerDown={handleBallPointerDown}
+          onPointerMove={handleBallPointerMove}
+          onPointerUp={handleBallPointerUp}
+        />
+      )}
       <FacePreview
         width={previewBox.width}
         height={previewBox.height}

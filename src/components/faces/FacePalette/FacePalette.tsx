@@ -11,10 +11,12 @@ export function FacePalette({
   enabled,
   onDragStart,
   onDragEnd,
+  onFaceNode,
 }: {
   enabled: boolean;
   onDragStart: (event: DragEvent, type: FaceType) => void;
   onDragEnd: () => void;
+  onFaceNode?: (type: FaceType, node: HTMLElement | null) => void;
 }) {
   const { copy } = useLocale();
   return (
@@ -36,6 +38,9 @@ export function FacePalette({
       {PALETTE_FACES.map((type) => (
         <Box
           key={type}
+          ref={(node) => {
+            onFaceNode?.(type, node instanceof HTMLElement ? node : null);
+          }}
           draggable={enabled}
           onDragStart={(event) => onDragStart(event, type)}
           onDragEnd={onDragEnd}

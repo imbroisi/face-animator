@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import { Alert, Box, Divider, IconButton, Stack, SvgIcon, Tooltip, Typography } from '@mui/material';
 import { cycleFaceAt } from '../../../audio/mouthCycles';
 import { faces, type FaceType } from '../../../faces/Faces';
@@ -36,6 +36,9 @@ export type AudioPlayerProps = {
   onRemoveDrop: (id: number) => void;
   onMoveDrop: (id: number, start: number) => void;
   onResizeDrop: (id: number, edge: 'start' | 'end', time: number) => void;
+  onPlayButton?: (el: HTMLElement | null) => void;
+  onSpeechArea?: (el: HTMLElement | null) => void;
+  onPlaybackEnded?: () => void;
 };
 
 const EMPTY_TRACK = {
@@ -54,15 +57,24 @@ export function AudioPlayer({
   onRemoveDrop,
   onMoveDrop,
   onResizeDrop,
+  onPlayButton,
+  onSpeechArea,
+  onPlaybackEnded,
 }: AudioPlayerProps) {
   const { copy } = useLocale();
   const track = loadedTrack ?? EMPTY_TRACK;
   const audioRef = useRef<HTMLAudioElement>(null);
+  const playButton = useRef<HTMLDivElement>(null);
   const stopped = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(track.duration);
   const [playError, setPlayError] = useState(false);
+
+  useLayoutEffect(() => {
+    onPlayButton?.(loadedTrack ? playButton.current : null);
+    return () => onPlayButton?.(null);
+  }, [loadedTrack, onPlayButton]);
 
   useEffect(() => {
     const audio = audioRef.current!;
@@ -147,6 +159,11 @@ export function AudioPlayer({
   }
 
   const waveRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    onSpeechArea?.(loadedTrack ? waveRef.current : null);
+    return () => onSpeechArea?.(null);
+  }, [loadedTrack, onSpeechArea]);
   const [pinDraggingId, setPinDraggingId] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const pinDrag = useRef<{
@@ -407,8 +424,11 @@ export function AudioPlayer({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => {
+          const audio = audioRef.current;
+          if (audio) audio.currentTime = 0;
           setPlaying(false);
-          onLevelChange(0);
+          syncPosition(0);
+          onPlaybackEnded?.();
         }}
         onTimeUpdate={(event) => syncPosition(event.currentTarget.currentTime)}
       />
@@ -443,13 +463,15 @@ export function AudioPlayer({
               </IconButton>
             </span>
           </Tooltip>
-          <IconButton
-            disabled={!loadedTrack}
-            onClick={() => void togglePlayback()}
-            aria-label={playing ? copy.pauseAudio : copy.playAudio}
-          >
-            <SvgIcon>{playing ? <path d="M6 5h4v14H6zm8 0h4v14h-4z" /> : <path d="M8 5v14l11-7z" />}</SvgIcon>
-          </IconButton>
+          <Box ref={playButton} sx={{ display: 'inline-flex' }}>
+            <IconButton
+              disabled={!loadedTrack}
+              onClick={() => void togglePlayback()}
+              aria-label={playing ? copy.pauseAudio : copy.playAudio}
+            >
+              <SvgIcon>{playing ? <path d="M6 5h4v14H6zm8 0h4v14h-4z" /> : <path d="M8 5v14l11-7z" />}</SvgIcon>
+            </IconButton>
+          </Box>
           <Tooltip title={copy.stepForward}>
             <span>
               <IconButton

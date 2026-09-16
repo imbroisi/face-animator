@@ -14,6 +14,15 @@ export type Catalog = {
   noAudioLoaded: string;
   analyzingSpeech: string;
   downloadingAudio: string;
+  example: string;
+  welcomeHint: string;
+  exampleLoadHint: string;
+  exampleUrlHint: string;
+  examplePlayHint: string;
+  exampleMoodHint: string;
+  exampleDropHint: string;
+  exampleReplayHint: string;
+  exampleSaveHint: string;
   saveMov: string;
   processingPercent: (percent: number) => string;
   audioArea: string;
@@ -81,17 +90,26 @@ export type Catalog = {
 };
 
 export const en: Catalog = {
-  loadAudio: 'Load audio',
-  loadAudioFile: 'Load audio file',
-  loadAudioSource: 'Audio source',
+  loadAudio: 'Load speech',
+  loadAudioFile: 'Load speech file',
+  loadAudioSource: 'Speech source',
   loadAudioLocal: 'This computer',
   loadAudioWeb: 'From the web',
-  loadAudioUrl: 'Audio URL',
-  loadAudioUrlHint: 'Paste a direct link to an audio file.',
+  loadAudioUrl: 'Speech URL',
+  loadAudioUrlHint: 'Paste a direct link to a speech file.',
   chooseAudioFile: 'Choose file',
-  noAudioLoaded: 'No audio loaded',
+  noAudioLoaded: 'No speech loaded',
   analyzingSpeech: 'Analyzing speech…',
-  downloadingAudio: 'Downloading audio…',
+  downloadingAudio: 'Downloading speech…',
+  example: 'Example',
+  welcomeHint: 'Welcome to Face Animator!\nYou can click EXAMPLE at any time and follow, step by step, how the app works.',
+  exampleLoadHint: 'Click to load a line of speech.',
+  exampleUrlHint: 'Choose a local file or one from the web. This example uses a file from the web.\nClick LOAD SPEECH.',
+  examplePlayHint: 'The file is loaded.\nClick play, and wait until the end.',
+  exampleMoodHint: 'You can optionally change the mood during the speech. Start dragging this face onto the speech area.',
+  exampleDropHint: 'Drop the upset face here.',
+  exampleReplayHint: 'Now click play to see the speech with the upset face included.',
+  exampleSaveHint: 'Now it is time to save the animation, to use it in your video.',
   saveMov: 'Save MOV',
   processingPercent: (percent) => `Processing… ${percent}%`,
   audioArea: 'Audio area',
@@ -164,17 +182,26 @@ export const en: Catalog = {
 };
 
 export const ptBR: Catalog = {
-  loadAudio: 'Carregar áudio',
-  loadAudioFile: 'Carregar arquivo de áudio',
-  loadAudioSource: 'Origem do áudio',
+  loadAudio: 'Carregar fala',
+  loadAudioFile: 'Carregar arquivo de fala',
+  loadAudioSource: 'Origem da fala',
   loadAudioLocal: 'Arquivo local',
   loadAudioWeb: 'Arquivo na web',
-  loadAudioUrl: 'URL do áudio',
-  loadAudioUrlHint: 'Cole o link direto do arquivo de áudio.',
+  loadAudioUrl: 'URL da fala',
+  loadAudioUrlHint: 'Cole o link direto do arquivo de fala.',
   chooseAudioFile: 'Escolher arquivo',
-  noAudioLoaded: 'Nenhum áudio carregado',
+  noAudioLoaded: 'Nenhuma fala carregada',
   analyzingSpeech: 'Analisando a fala…',
-  downloadingAudio: 'Baixando o áudio…',
+  downloadingAudio: 'Baixando a fala…',
+  example: 'Exemplo',
+  welcomeHint: 'Bem-vindo ao Face Animator!\nA qualquer momento você pode clicar em EXEMPLO e assistir, passo a passo, o funcionamento do aplicativo.',
+  exampleLoadHint: 'Clique para carregar uma fala.',
+  exampleUrlHint: 'Escolha entre um arquivo local ou na web. Para este exemplo estamos usando um arquivo na web.\nClique em CARREGAR FALA.',
+  examplePlayHint: 'O arquivo foi carregado.\nClique em play, e espere até o final.',
+  exampleMoodHint: 'Você pode opcionalmente mudar o humor durante a fala. Comece a arrastar este rosto até a área da fala.',
+  exampleDropHint: 'Solte o aborrecido aqui.',
+  exampleReplayHint: 'Agora clique em play para ver a fala com o aborrecido incluido.',
+  exampleSaveHint: 'Agora está na hora de salvar a animação, para ser usada em seu vídeo.',
   saveMov: 'Salvar MOV',
   processingPercent: (percent) => `Processando… ${percent}%`,
   audioArea: 'Área de áudio',

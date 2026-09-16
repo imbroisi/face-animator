@@ -1,6 +1,7 @@
 import { Alert, Box, Button, CssBaseline, Stack, ThemeProvider, Typography } from '@mui/material';
 import { flushSync } from 'react-dom';
-import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { exampleSpeechUrl } from '../../audio/exampleSpeechUrl';
 import { fetchAudioFile } from '../../audio/fetchAudioFile';
 import { limitPeakGain } from '../../audio/limitPeakGain';
 import { prepareAudio } from '../../audio/prepareAudio';
@@ -27,7 +28,25 @@ import { FacePalette } from '../faces/FacePalette';
 import { FaceSetPicker } from '../faces/FaceSetPicker';
 import { PreviewStage } from '../preview/PreviewStage';
 import { LocaleSwitcher } from '../shared/LocaleSwitcher';
+import { SpeechBalloon, type BalloonAnchor } from '../tutorial/SpeechBalloon';
+import { rememberWelcomeSeen, shouldShowWelcome } from '../tutorial/firstVisit';
 import { appTheme } from './appTheme';
+
+const DROP_HINT_SECONDS = 5;
+
+function speechDropAnchor(area: HTMLElement | null, duration: number): BalloonAnchor | null {
+  if (!area || duration <= 0) return null;
+  const seconds = Math.min(DROP_HINT_SECONDS, duration);
+  return {
+    contextElement: area,
+    getBoundingClientRect() {
+      const box = area.getBoundingClientRect();
+      const x = box.left + (seconds / duration) * box.width;
+      const y = box.top + box.height / 2;
+      return new DOMRect(x, y, 0, 0);
+    },
+  };
+}
 
 export function App() {
   const { locale, copy } = useLocale();
@@ -46,7 +65,28 @@ export function App() {
   const [downloading, setDownloading] = useState(false);
   const [choosingFile, setChoosingFile] = useState(false);
   const [loadOpen, setLoadOpen] = useState(false);
+  const [loadId, setLoadId] = useState(0);
+  const [exampleLoad, setExampleLoad] = useState(false);
+  const [exampleOpen, setExampleOpen] = useState(false);
+  const [exampleAnchor, setExampleAnchor] = useState<HTMLElement | null>(null);
+  const [welcomeOpen, setWelcomeOpen] = useState(() => shouldShowWelcome());
+  const [welcomeAnchor, setWelcomeAnchor] = useState<HTMLElement | null>(null);
+  const [exampleUrlHint, setExampleUrlHint] = useState(false);
+  const [urlAnchor, setUrlAnchor] = useState<HTMLElement | null>(null);
+  const [examplePlayHint, setExamplePlayHint] = useState(false);
+  const [playAnchor, setPlayAnchor] = useState<HTMLElement | null>(null);
+  const [exampleMoodHint, setExampleMoodHint] = useState(false);
+  const [upsetAnchor, setUpsetAnchor] = useState<HTMLElement | null>(null);
+  const [exampleDropHint, setExampleDropHint] = useState(false);
+  const [exampleSaveHint, setExampleSaveHint] = useState(false);
+  const [saveAnchor, setSaveAnchor] = useState<HTMLElement | null>(null);
+  const [speechArea, setSpeechArea] = useState<HTMLElement | null>(null);
+  const [examplePlayKind, setExamplePlayKind] = useState<'load' | 'replay'>('load');
+  const exampleHasMoodDrop = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const loadAudioButton = useRef<HTMLButtonElement>(null);
+  const exampleButton = useRef<HTMLButtonElement>(null);
+  const saveMovButton = useRef<HTMLButtonElement>(null);
   const [hideTrackName, setHideTrackName] = useState(false);
   const [error, setError] = useState('');
   const abortExport = useRef<AbortController | null>(null);
@@ -76,6 +116,16 @@ export function App() {
   useEffect(() => () => {
     request.current += 1;
   }, []);
+
+  useLayoutEffect(() => {
+    if (!welcomeOpen) return;
+    setWelcomeAnchor(exampleButton.current);
+  }, [welcomeOpen]);
+
+  function dismissWelcome() {
+    rememberWelcomeSeen();
+    setWelcomeOpen(false);
+  }
 
   async function applyAudioFile(file: File, id: number) {
     setDownloading(false);
@@ -118,6 +168,12 @@ export function App() {
           peaks,
           mouthTimeline,
         });
+        setExamplePlayHint(exampleLoad);
+        setExamplePlayKind('load');
+        setExampleMoodHint(false);
+        setExampleDropHint(false);
+        setExampleSaveHint(false);
+        exampleHasMoodDrop.current = false;
       }
     } catch (loadError) {
       if (id === request.current) {
@@ -177,6 +233,11 @@ export function App() {
     setError('');
     setDownloading(false);
     setLoading(false);
+    setExamplePlayHint(false);
+    setExampleMoodHint(false);
+    setExampleDropHint(false);
+    setExampleSaveHint(false);
+    exampleHasMoodDrop.current = false;
   }
 
   function closeExportDialog() {
@@ -249,12 +310,23 @@ export function App() {
       hotY: node.clientHeight / 2,
       face: type,
     });
+    if (exampleLoad && type === 'upset' && !exampleHasMoodDrop.current) {
+      setExampleMoodHint(false);
+      setExampleDropHint(true);
+    }
+  }
+
+  function handleFaceNode(type: FaceType, node: HTMLElement | null) {
+    if (type === 'upset') setUpsetAnchor(node);
   }
 
   const handleDropFace = useCallback((time: number, nextFace: FaceType) => {
+    if (!track) return;
+    const duration = track.duration;
+    let placed = false;
     setDrops((current) => {
-      const duration = track?.duration;
-      if (duration == null || dropBlocked(time, duration, current)) return current;
+      if (dropBlocked(time, duration, current)) return current;
+      placed = true;
       dropId.current += 1;
       return [...current, {
         id: dropId.current,
@@ -263,7 +335,13 @@ export function App() {
         face: nextFace,
       }];
     });
-  }, [track]);
+    if (!placed || !exampleLoad || nextFace !== 'upset') return;
+    exampleHasMoodDrop.current = true;
+    setExampleDropHint(false);
+    setExampleMoodHint(false);
+    setExamplePlayKind('replay');
+    setExamplePlayHint(true);
+  }, [track, exampleLoad]);
 
   const handleRemoveDrop = useCallback((id: number) => {
     setDrops((current) => current.filter((drop) => drop.id !== id));
@@ -297,6 +375,10 @@ export function App() {
 
   const previewFace = track ? faceAtTime(playbackTime, drops) : face;
   const eyeOverlay = eyeUrl(previewFace, playbackTime);
+  const dropAnchor = useMemo(
+    () => speechDropAnchor(speechArea, track?.duration ?? 0),
+    [speechArea, track?.duration],
+  );
   let audioStatus = track?.name ?? copy.noAudioLoaded;
   if (downloading) audioStatus = copy.downloadingAudio;
   else if (loading) audioStatus = copy.analyzingSpeech;
@@ -309,13 +391,30 @@ export function App() {
         component="main"
         sx={{ width: '100%', height: '100dvh', pt: 2, display: 'flex', flexDirection: 'column' }}
       >
-        <Stack direction="row" spacing={2} sx={{ px: 2, mb: 3, alignItems: 'center', flexShrink: 0, overflowX: 'auto' }}>
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{ px: 2, mb: 3, alignItems: 'center', overflowX: 'auto', flexShrink: 0 }}
+        >
           <Button
+            ref={loadAudioButton}
             variant="outlined"
             disabled={loading || choosingFile}
             onClick={() => {
+              setExampleLoad(exampleOpen);
+              setExampleUrlHint(exampleOpen);
+              setExamplePlayHint(false);
+              setExampleMoodHint(false);
+              setExampleDropHint(false);
+              setExampleSaveHint(false);
+              setExampleOpen(false);
               setError('');
+              setLoadId((id) => id + 1);
               setLoadOpen(true);
+            }}
+            sx={{
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
             }}
           >
             {copy.loadAudio}
@@ -347,19 +446,34 @@ export function App() {
             {audioStatus}
           </Typography>
           <Button
+            ref={saveMovButton}
             variant="outlined"
             disabled={!track || loading || choosingFile || exporting}
             onClick={() => {
+              setExampleSaveHint(false);
               setMovSize(readMovOutputSize());
               setExportOpen(true);
             }}
-            sx={{ flexShrink: 0 }}
+            sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
           >
             {exporting ? copy.processingPercent(savePercent) : copy.saveMov}
           </Button>
           <Box sx={{ flex: 1, minWidth: 0 }} />
+          <Button
+            ref={exampleButton}
+            variant="outlined"
+            onClick={() => {
+              dismissWelcome();
+              setExampleAnchor(loadAudioButton.current);
+              setExampleOpen(true);
+            }}
+            sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+          >
+            {copy.example}
+          </Button>
+          <Box sx={{ flex: 1, minWidth: 0 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-            {!track && (
+            {import.meta.env.DEV && !track && (
               <FaceSetPicker
                 face={face}
                 faceLevel={faceLevel}
@@ -368,7 +482,7 @@ export function App() {
                 onNextMouth={handleNextMouth}
               />
             )}
-            <Box sx={{ ml: track ? 0 : '100px' }}>
+            <Box sx={{ ml: import.meta.env.DEV && !track ? '100px' : 0 }}>
               <LocaleSwitcher />
             </Box>
           </Box>
@@ -382,7 +496,12 @@ export function App() {
           <FacePalette
             enabled={Boolean(track)}
             onDragStart={handleFaceDragStart}
-            onDragEnd={() => setPaletteDrag(null)}
+            onDragEnd={() => {
+              setPaletteDrag(null);
+              setExampleDropHint(false);
+              if (exampleLoad && !exampleHasMoodDrop.current) setExampleMoodHint(true);
+            }}
+            onFaceNode={handleFaceNode}
           />
         </Box>
         <Box component="section" aria-label={copy.audioArea} sx={{ width: '100%', flexShrink: 0, pt: 0.5 }}>
@@ -398,12 +517,90 @@ export function App() {
             onRemoveDrop={handleRemoveDrop}
             onMoveDrop={handleMoveDrop}
             onResizeDrop={handleResizeDrop}
+            onPlayButton={setPlayAnchor}
+            onSpeechArea={setSpeechArea}
+            onPlaybackEnded={() => {
+              if (!exampleLoad) return;
+              setExamplePlayHint(false);
+              setExampleMoodHint(false);
+              setExampleDropHint(false);
+              if (exampleHasMoodDrop.current) {
+                setSaveAnchor(saveMovButton.current);
+                setExampleSaveHint(true);
+                return;
+              }
+              setExampleMoodHint(true);
+            }}
           />
         </Box>
       </Box>
+      <SpeechBalloon
+        open={welcomeOpen && Boolean(welcomeAnchor)}
+        anchorEl={welcomeAnchor}
+        placement="bottom"
+        onClose={dismissWelcome}
+      >
+        {copy.welcomeHint}
+      </SpeechBalloon>
+      <SpeechBalloon
+        open={exampleOpen}
+        anchorEl={exampleAnchor}
+        onClose={() => setExampleOpen(false)}
+      >
+        {copy.exampleLoadHint}
+      </SpeechBalloon>
+      <SpeechBalloon
+        open={exampleUrlHint && Boolean(urlAnchor)}
+        anchorEl={urlAnchor}
+        placement="left-start"
+        fallbackPlacements={['right-start']}
+        onClose={() => setExampleUrlHint(false)}
+      >
+        {copy.exampleUrlHint}
+      </SpeechBalloon>
+      <SpeechBalloon
+        open={examplePlayHint && Boolean(playAnchor)}
+        anchorEl={playAnchor}
+        placement="top"
+        onClose={() => setExamplePlayHint(false)}
+      >
+        {examplePlayKind === 'replay' ? copy.exampleReplayHint : copy.examplePlayHint}
+      </SpeechBalloon>
+      <SpeechBalloon
+        open={exampleMoodHint && Boolean(upsetAnchor)}
+        anchorEl={upsetAnchor}
+        placement="left"
+        onClose={() => setExampleMoodHint(false)}
+      >
+        {copy.exampleMoodHint}
+      </SpeechBalloon>
+      <SpeechBalloon
+        open={exampleDropHint && Boolean(dropAnchor)}
+        anchorEl={dropAnchor}
+        placement="top"
+        gap={0}
+        disableClickAway
+        pointerEvents="none"
+        onClose={() => setExampleDropHint(false)}
+      >
+        {copy.exampleDropHint}
+      </SpeechBalloon>
+      <SpeechBalloon
+        open={exampleSaveHint && Boolean(saveAnchor)}
+        anchorEl={saveAnchor}
+        onClose={() => setExampleSaveHint(false)}
+      >
+        {copy.exampleSaveHint}
+      </SpeechBalloon>
       <LoadAudioDialog
+        key={loadId}
         open={loadOpen}
-        onClose={() => setLoadOpen(false)}
+        initialWebUrl={exampleLoad ? exampleSpeechUrl(locale) : undefined}
+        onClose={() => {
+          setLoadOpen(false);
+          setExampleUrlHint(false);
+        }}
+        onUrlField={setUrlAnchor}
         onChooseLocal={chooseLocalAudio}
         onChooseWeb={(url) => void loadAudioFromUrl(url)}
       />

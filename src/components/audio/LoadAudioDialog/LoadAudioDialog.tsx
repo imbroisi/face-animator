@@ -11,7 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState, type FormEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { isHttpUrl } from '../../../audio/fetchAudioFile';
 import { useLocale } from '../../../i18n/LocaleProvider';
 
@@ -19,18 +19,32 @@ type AudioSource = 'local' | 'web';
 
 export function LoadAudioDialog({
   open,
+  initialWebUrl,
   onClose,
   onChooseLocal,
   onChooseWeb,
+  onUrlField,
 }: {
   open: boolean;
+  initialWebUrl?: string;
   onClose: () => void;
   onChooseLocal: () => void;
   onChooseWeb: (url: string) => void;
+  onUrlField?: (el: HTMLElement | null) => void;
 }) {
   const { copy } = useLocale();
-  const [source, setSource] = useState<AudioSource>('local');
-  const [url, setUrl] = useState('');
+  const urlInput = useRef<HTMLInputElement>(null);
+  const [source, setSource] = useState<AudioSource>(initialWebUrl ? 'web' : 'local');
+  const [url, setUrl] = useState(initialWebUrl ?? '');
+
+  useLayoutEffect(() => {
+    if (!onUrlField) return;
+    if (!open || source !== 'web') onUrlField(null);
+  }, [open, source, onUrlField]);
+
+  function reportUrlField() {
+    if (open && source === 'web') onUrlField?.(urlInput.current);
+  }
 
   const webUrl = url.trim();
   const canConfirm = source === 'local' || isHttpUrl(webUrl);
@@ -56,7 +70,17 @@ export function LoadAudioDialog({
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} aria-labelledby="load-audio-title">
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      aria-labelledby="load-audio-title"
+      slotProps={{
+        transition: {
+          onEntered: reportUrlField,
+          onExited: () => onUrlField?.(null),
+        },
+      }}
+    >
       <form onSubmit={handleSubmit}>
         <DialogTitle id="load-audio-title">{copy.loadAudio}</DialogTitle>
         <DialogContent sx={{ minWidth: 320 }}>
@@ -92,6 +116,7 @@ export function LoadAudioDialog({
                 label={copy.loadAudioUrl}
                 placeholder="https://"
                 value={url}
+                inputRef={urlInput}
                 onChange={(event) => setUrl(event.target.value)}
               />
               <Typography variant="body2" color="text.secondary">
