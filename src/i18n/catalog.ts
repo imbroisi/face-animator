@@ -5,8 +5,15 @@ export type FaceLabelKey = 'normal' | 'upset' | 'sad' | 'suspicious';
 export type Catalog = {
   loadAudio: string;
   loadAudioFile: string;
+  loadAudioSource: string;
+  loadAudioLocal: string;
+  loadAudioWeb: string;
+  loadAudioUrl: string;
+  loadAudioUrlHint: string;
+  chooseAudioFile: string;
   noAudioLoaded: string;
   analyzingSpeech: string;
+  downloadingAudio: string;
   saveMov: string;
   processingPercent: (percent: number) => string;
   audioArea: string;
@@ -45,6 +52,8 @@ export type Catalog = {
   size1080p: string;
   sizeNative: string;
   errorLoadAudio: string;
+  errorInvalidAudioUrl: string;
+  errorLoadAudioUrl: string;
   errorPlayAudio: string;
   errorEmptyVideo: string;
   errorExport: string;
@@ -74,8 +83,15 @@ export type Catalog = {
 export const en: Catalog = {
   loadAudio: 'Load audio',
   loadAudioFile: 'Load audio file',
+  loadAudioSource: 'Audio source',
+  loadAudioLocal: 'This computer',
+  loadAudioWeb: 'From the web',
+  loadAudioUrl: 'Audio URL',
+  loadAudioUrlHint: 'Paste a direct link to an audio file.',
+  chooseAudioFile: 'Choose file',
   noAudioLoaded: 'No audio loaded',
   analyzingSpeech: 'Analyzing speech…',
+  downloadingAudio: 'Downloading audio…',
   saveMov: 'Save MOV',
   processingPercent: (percent) => `Processing… ${percent}%`,
   audioArea: 'Audio area',
@@ -119,6 +135,8 @@ export const en: Catalog = {
   size1080p: '1080p (height 1080)',
   sizeNative: 'Native (face resolution)',
   errorLoadAudio: 'Could not load this audio.',
+  errorInvalidAudioUrl: 'Enter a valid http or https URL.',
+  errorLoadAudioUrl: 'Could not download this audio. Check the link or try a local file.',
   errorPlayAudio: 'Could not play the audio. Try again.',
   errorEmptyVideo: 'The generated video is empty.',
   errorExport: 'Failed to export the video.',
@@ -148,8 +166,15 @@ export const en: Catalog = {
 export const ptBR: Catalog = {
   loadAudio: 'Carregar áudio',
   loadAudioFile: 'Carregar arquivo de áudio',
+  loadAudioSource: 'Origem do áudio',
+  loadAudioLocal: 'Arquivo local',
+  loadAudioWeb: 'Arquivo na web',
+  loadAudioUrl: 'URL do áudio',
+  loadAudioUrlHint: 'Cole o link direto do arquivo de áudio.',
+  chooseAudioFile: 'Escolher arquivo',
   noAudioLoaded: 'Nenhum áudio carregado',
   analyzingSpeech: 'Analisando a fala…',
+  downloadingAudio: 'Baixando o áudio…',
   saveMov: 'Salvar MOV',
   processingPercent: (percent) => `Processando… ${percent}%`,
   audioArea: 'Área de áudio',
@@ -193,6 +218,8 @@ export const ptBR: Catalog = {
   size1080p: '1080p (altura 1080)',
   sizeNative: 'Nativo (resolução da face)',
   errorLoadAudio: 'Não foi possível carregar este áudio.',
+  errorInvalidAudioUrl: 'Informe uma URL http ou https válida.',
+  errorLoadAudioUrl: 'Não foi possível baixar este áudio. Verifique o link ou use um arquivo local.',
   errorPlayAudio: 'Não foi possível reproduzir o áudio. Tente novamente.',
   errorEmptyVideo: 'O vídeo gerado está vazio.',
   errorExport: 'Falha ao exportar o vídeo.',

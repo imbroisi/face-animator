@@ -1,15 +1,19 @@
 import { Alert, Box, Button, CssBaseline, Stack, ThemeProvider, Typography } from '@mui/material';
 import { flushSync } from 'react-dom';
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import { fetchAudioFile } from '../../audio/fetchAudioFile';
+import { limitPeakGain } from '../../audio/limitPeakGain';
 import { prepareAudio } from '../../audio/prepareAudio';
 import { buildMouthCycles } from '../../audio/mouthCycles';
 import { FACE_TYPES, faces, type FaceType } from '../../faces/Faces';
 import { eyes, eyeUrl } from '../../faces/eyes';
 import { exportMov } from '../../export/exportMov';
+import { pcmWav } from '../../export/pcmWav';
 import { readMovOutputSize, writeMovOutputSize, type MovOutputSize } from '../../export/movSize';
 import { useLocale } from '../../i18n/LocaleProvider';
 import { translateThrown } from '../../i18n/translateError';
 import { AudioPlayer } from '../audio/AudioPlayer';
+import { LoadAudioDialog } from '../audio/LoadAudioDialog';
 import {
   DROP_SECONDS,
   clampDropEdge,
@@ -39,7 +43,9 @@ export function App() {
   const [paletteDrag, setPaletteDrag] = useState<PaletteDrag | null>(null);
   const dropId = useRef(0);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [choosingFile, setChoosingFile] = useState(false);
+  const [loadOpen, setLoadOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [hideTrackName, setHideTrackName] = useState(false);
   const [error, setError] = useState('');
@@ -59,7 +65,10 @@ export function App() {
 
   useEffect(() => {
     const input = fileInput.current;
-    const cancel = () => setChoosingFile(false);
+    const cancel = () => {
+      setChoosingFile(false);
+      setHideTrackName(false);
+    };
     input?.addEventListener('cancel', cancel);
     return () => input?.removeEventListener('cancel', cancel);
   }, []);
@@ -68,9 +77,8 @@ export function App() {
     request.current += 1;
   }, []);
 
-  async function loadAudio(file: File) {
-    request.current += 1;
-    const id = request.current;
+  async function applyAudioFile(file: File, id: number) {
+    setDownloading(false);
     setLoading(true);
     setHideTrackName(true);
     setError('');
@@ -82,18 +90,34 @@ export function App() {
       if (id !== request.current) return;
       context = new AudioContext();
       const buffer = await context.decodeAudioData(await file.arrayBuffer());
-      const channels = Array.from(
+      const decoded = Array.from(
         { length: buffer.numberOfChannels },
-        (_, i) => buffer.getChannelData(i),
+        (_, index) => buffer.getChannelData(index),
       );
-      const { peaks, mono } = prepareAudio(channels, buffer.sampleRate);
+      const limited = limitPeakGain(decoded);
+      const { peaks, mono } = prepareAudio(limited.channels, buffer.sampleRate);
       const mouthTimeline = buildMouthCycles(mono, buffer.sampleRate, faces.normal);
+      let playback = file;
+      if (limited.changed) {
+        playback = new File(
+          [pcmWav(limited.channels, buffer.sampleRate)],
+          file.name,
+          { type: 'audio/wav' },
+        );
+      }
       if (id === request.current) {
         setFaceLevel(0);
         setPlaybackTime(0);
         setHideTrackName(false);
         setDrops([]);
-        setTrack({ id, file, name: file.name, duration: buffer.duration, peaks, mouthTimeline });
+        setTrack({
+          id,
+          file: playback,
+          name: file.name,
+          duration: buffer.duration,
+          peaks,
+          mouthTimeline,
+        });
       }
     } catch (loadError) {
       if (id === request.current) {
@@ -101,8 +125,46 @@ export function App() {
       }
     } finally {
       if (context) void context.close().catch(() => {});
-      if (id === request.current) setLoading(false);
+      if (id === request.current) {
+        setDownloading(false);
+        setLoading(false);
+      }
     }
+  }
+
+  function loadAudio(file: File) {
+    request.current += 1;
+    void applyAudioFile(file, request.current);
+  }
+
+  async function loadAudioFromUrl(url: string) {
+    request.current += 1;
+    const id = request.current;
+    setLoadOpen(false);
+    setDownloading(true);
+    setLoading(true);
+    setHideTrackName(true);
+    setError('');
+    try {
+      const file = await fetchAudioFile(url);
+      if (id !== request.current) return;
+      await applyAudioFile(file, id);
+    } catch (loadError) {
+      if (id !== request.current) return;
+      setError(translateThrown(copy, loadError, 'errorLoadAudio'));
+      setDownloading(false);
+      setLoading(false);
+      setHideTrackName(false);
+    }
+  }
+
+  function chooseLocalAudio() {
+    flushSync(() => {
+      setChoosingFile(true);
+      setHideTrackName(true);
+      setLoadOpen(false);
+    });
+    fileInput.current?.click();
   }
 
   function removeAudio() {
@@ -113,6 +175,7 @@ export function App() {
     setFaceLevel(0);
     setPlaybackTime(0);
     setError('');
+    setDownloading(false);
     setLoading(false);
   }
 
@@ -235,7 +298,8 @@ export function App() {
   const previewFace = track ? faceAtTime(playbackTime, drops) : face;
   const eyeOverlay = eyeUrl(previewFace, playbackTime);
   let audioStatus = track?.name ?? copy.noAudioLoaded;
-  if (loading) audioStatus = copy.analyzingSpeech;
+  if (downloading) audioStatus = copy.downloadingAudio;
+  else if (loading) audioStatus = copy.analyzingSpeech;
   else if (hideTrackName) audioStatus = '';
 
   return (
@@ -250,11 +314,8 @@ export function App() {
             variant="outlined"
             disabled={loading || choosingFile}
             onClick={() => {
-              flushSync(() => {
-                setChoosingFile(true);
-                setHideTrackName(true);
-              });
-              fileInput.current?.click();
+              setError('');
+              setLoadOpen(true);
             }}
           >
             {copy.loadAudio}
@@ -340,6 +401,12 @@ export function App() {
           />
         </Box>
       </Box>
+      <LoadAudioDialog
+        open={loadOpen}
+        onClose={() => setLoadOpen(false)}
+        onChooseLocal={chooseLocalAudio}
+        onChooseWeb={(url) => void loadAudioFromUrl(url)}
+      />
       <ExportDialog
         open={exportOpen}
         exporting={exporting}
