@@ -82,6 +82,10 @@ export function faceAtTime(time: number, drops: readonly FaceDrop[]) {
   for (const drop of drops) {
     if (time >= drop.start && time < drop.end) return drop.face;
   }
+  // Inclusive at a drop's end so the export tail keeps the last selected face.
+  for (const drop of drops) {
+    if (time >= drop.start && time - drop.end <= 1 / 60) return drop.face;
+  }
   return 'normal' as const;
 }
 

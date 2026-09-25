@@ -11,26 +11,39 @@ export type MovManifest = {
   duration: number;
   width: number;
   height: number;
+  blur: number;
   segments: MovSegment[];
 };
 
-// Opaque H.264 MP4: Filmora keeps correct timing and files stay small.
-// video_track_timescale 30000 matches the CFR timeline Filmora expects.
-export const H264_ENCODE_ARGS = [
-  '-vf', 'format=yuv420p,fps=30,setsar=1',
-  '-fps_mode', 'cfr',
-  '-video_track_timescale', '30000',
-  '-c:v', 'libx264',
-  '-preset', 'fast',
-  '-crf', '18',
-  '-pix_fmt', 'yuv420p',
-  '-c:a', 'aac',
-  '-b:a', '128k',
-] as const;
+export function proresEncodeArgs(blurPx: number) {
+  const blur = Number.isFinite(blurPx) && blurPx > 0 ? blurPx : 0;
+  const filters = ['format=rgba'];
+  if (blur > 0) {
+    const pad = Math.max(2, Math.ceil(blur * 3));
+    filters.push(`pad=${pad * 2}+iw:${pad * 2}+ih:${pad}:${pad}:black@0`);
+    filters.push(`gblur=sigma=${blur}`);
+  }
+  filters.push('fps=30', 'setsar=1');
+  return [
+    '-vf', filters.join(','),
+    '-sws_flags', 'neighbor+accurate_rnd+full_chroma_int+full_chroma_inp',
+    '-video_track_timescale', '30000',
+    '-color_range', 'pc',
+    '-colorspace', 'bt709',
+    '-color_primaries', 'bt709',
+    '-color_trc', 'iec61966-2-1',
+    '-c:v', 'prores_ks',
+    '-profile:v', '4',
+    '-pix_fmt', 'yuva444p10le',
+    '-alpha_bits', '16',
+    '-c:a', 'pcm_s16le',
+  ];
+}
 
 export function parseMovManifest(raw: string): MovManifest {
   const parsed = JSON.parse(raw) as Partial<MovManifest>;
   const { duration, width, height, segments } = parsed;
+  const blur = parsed.blur ?? 0;
   if (
     !Number.isFinite(duration)
     || duration == null
@@ -44,12 +57,15 @@ export function parseMovManifest(raw: string): MovManifest {
     || height == null
     || height < 1
     || height > 8192
+    || !Number.isFinite(blur)
+    || blur < 0
+    || blur > 40
     || !Array.isArray(segments)
     || segments.length > 108000
   ) {
     throw new Error('errorExportInvalidVideo');
   }
-  return { duration, width, height, segments };
+  return { duration, width, height, blur, segments };
 }
 
 export function assertMovSequence(duration: number, segments: MovSegment[]) {

@@ -1,7 +1,7 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL } from '@ffmpeg/util';
 import {
-  H264_ENCODE_ARGS,
+  proresEncodeArgs,
   concatLines,
   splitBodyTail,
   type MovSegment,
@@ -61,6 +61,7 @@ export async function encodeMovBrowser(
   audio: File,
   segments: MovSegment[],
   faces: readonly BrowserFacePng[],
+  blurPx: number,
   onProgress?: (percent: number) => void,
   signal?: AbortSignal,
 ) {
@@ -112,8 +113,8 @@ export async function encodeMovBrowser(
       '-map', '0:v:0',
       '-map', '1:a:0',
       '-t', (bodyFrames / 30).toFixed(9),
-      ...H264_ENCODE_ARGS,
-      'body.mp4',
+      ...proresEncodeArgs(blurPx),
+      'body.mov',
     ], signal);
     instance.off('progress', onProgressEvent);
     report(86);
@@ -126,14 +127,14 @@ export async function encodeMovBrowser(
       '-map', '0:v:0',
       '-map', '1:a:0',
       '-t', '2',
-      ...H264_ENCODE_ARGS,
-      'tail.mp4',
+      ...proresEncodeArgs(blurPx),
+      'tail.mov',
     ], signal);
     report(94);
 
     await instance.writeFile(
       'parts.txt',
-      'ffconcat version 1.0\nfile body.mp4\nfile tail.mp4\n',
+      'ffconcat version 1.0\nfile body.mov\nfile tail.mov\n',
       { signal },
     );
     await execOrThrow(instance, [
@@ -142,21 +143,21 @@ export async function encodeMovBrowser(
       '-i', 'parts.txt',
       '-c', 'copy',
       '-movflags', '+faststart',
-      'animation.mp4',
+      'animation.mov',
     ], signal);
     report(98);
 
-    const data = await instance.readFile('animation.mp4', undefined, { signal });
+    const data = await instance.readFile('animation.mov', undefined, { signal });
     if (typeof data === 'string') throw new Error('errorExportFfmpeg');
     const copy = new Uint8Array(data.byteLength);
     copy.set(data);
     report(100);
-    return new Blob([copy], { type: 'video/mp4' });
+    return new Blob([copy], { type: 'video/quicktime' });
   } finally {
     signal?.removeEventListener('abort', abortEncode);
     const leftovers = [
       'frames.txt', 'tail.txt', 'body.wav', 'tail.wav', 'parts.txt',
-      'body.mp4', 'tail.mp4', 'animation.mp4',
+      'body.mov', 'tail.mov', 'animation.mov',
       ...faces.map((face) => `face-${face.face}.png`),
     ];
     await Promise.all(leftovers.map((path) => instance.deleteFile(path).catch(() => {})));

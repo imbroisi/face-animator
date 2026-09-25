@@ -1,5 +1,4 @@
 import {
-  Box,
   Button,
   Dialog,
   DialogActions,
@@ -14,10 +13,6 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import {
-  cssBackgroundHex,
-  normalizeBackgroundHex,
-} from '../../../export/exportLook';
 import { isMovOutputSize, type MovOutputSize } from '../../../export/movSize';
 import { useLocale } from '../../../i18n/LocaleProvider';
 
@@ -26,33 +21,27 @@ export function ExportDialog({
   exporting,
   savePercent,
   movSize,
-  backgroundHex,
   blurPx,
   onClose,
   onCancelExport,
   onConfirm,
   onMovSizeChange,
-  onBackgroundHexChange,
   onBlurPxChange,
 }: {
   open: boolean;
   exporting: boolean;
   savePercent: number;
   movSize: MovOutputSize;
-  backgroundHex: string;
   blurPx: string;
   onClose: () => void;
   onCancelExport: () => void;
   onConfirm: () => void;
   onMovSizeChange: (size: MovOutputSize) => void;
-  onBackgroundHexChange: (hex: string) => void;
   onBlurPxChange: (blurPx: string) => void;
 }) {
   const { copy } = useLocale();
   const blur = Number(blurPx);
-  const canConfirm = Boolean(normalizeBackgroundHex(backgroundHex))
-    && Number.isFinite(blur)
-    && blur >= 0;
+  const canConfirm = Number.isFinite(blur) && blur >= 0;
   return (
     <Dialog
       open={open}
@@ -108,45 +97,6 @@ export function ExportDialog({
                     onChange={(event) => onBlurPxChange(event.target.value)}
                     slotProps={{ htmlInput: { min: 0, step: 0.5 } }}
                   />
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                    <TextField
-                      label={copy.videoBackground}
-                      value={backgroundHex}
-                      onChange={(event) => {
-                        onBackgroundHexChange(
-                          event.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6),
-                        );
-                      }}
-                      slotProps={{
-                        htmlInput: {
-                          maxLength: 6,
-                          spellCheck: false,
-                          inputMode: 'text',
-                        },
-                      }}
-                      sx={{ flex: 1 }}
-                    />
-                    <Box
-                      component="input"
-                      type="color"
-                      aria-label={copy.videoBackgroundPicker}
-                      value={cssBackgroundHex(backgroundHex)}
-                      onChange={(event) => {
-                        const hex = normalizeBackgroundHex(event.target.value);
-                        if (hex) onBackgroundHexChange(hex);
-                      }}
-                      sx={{
-                        width: 48,
-                        height: 40,
-                        p: 0,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                        bgcolor: 'transparent',
-                        cursor: 'pointer',
-                      }}
-                    />
-                  </Stack>
                 </Stack>
               </DialogContent>
               <DialogActions>

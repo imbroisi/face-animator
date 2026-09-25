@@ -12,11 +12,7 @@ import { exportMov } from '../../export/exportMov';
 import { pcmWav } from '../../export/pcmWav';
 import { readMovOutputSize, writeMovOutputSize, type MovOutputSize } from '../../export/movSize';
 import {
-  DEFAULT_BACKGROUND_HEX,
-  normalizeBackgroundHex,
-  readExportBackgroundHex,
   readExportBlurPx,
-  writeExportBackgroundHex,
   writeExportBlurPx,
 } from '../../export/exportLook';
 import { useLocale } from '../../i18n/LocaleProvider';
@@ -65,7 +61,6 @@ export function App() {
   const [savePercent, setSavePercent] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
   const [movSize, setMovSize] = useState<MovOutputSize>(() => readMovOutputSize());
-  const [backgroundHex, setBackgroundHex] = useState(readExportBackgroundHex);
   const [blurPx, setBlurPx] = useState(() => String(readExportBlurPx()));
   const [track, setTrack] = useState<Track | null>(null);
   const [drops, setDrops] = useState<FaceDrop[]>([]);
@@ -257,13 +252,10 @@ export function App() {
 
   async function confirmExport() {
     if (!track) return;
-    const background = normalizeBackgroundHex(backgroundHex) ?? DEFAULT_BACKGROUND_HEX;
     const blur = Number(blurPx);
     if (!Number.isFinite(blur) || blur < 0) return;
     writeMovOutputSize(movSize);
-    writeExportBackgroundHex(background);
     writeExportBlurPx(blur);
-    setBackgroundHex(background);
     setError('');
     const name = suggestedMovName(track.name);
     const abort = new AbortController();
@@ -278,16 +270,15 @@ export function App() {
         track.mouthTimeline,
         (time) => faceAtTime(time, drops),
         movSize,
-        background,
         blur,
         locale,
         setSavePercent,
         abort.signal,
       );
       if (!blob.size) throw new Error('errorEmptyVideo');
-      const file = blob.type === 'video/mp4'
+      const file = blob.type === 'video/quicktime'
         ? blob
-        : new Blob([blob], { type: 'video/mp4' });
+        : new Blob([blob], { type: 'video/quicktime' });
       downloadMov(file, name);
       setExportOpen(false);
     } catch (exportError) {
@@ -627,13 +618,11 @@ export function App() {
         exporting={exporting}
         savePercent={savePercent}
         movSize={movSize}
-        backgroundHex={backgroundHex}
         blurPx={blurPx}
         onClose={closeExportDialog}
         onCancelExport={cancelExport}
         onConfirm={() => void confirmExport()}
         onMovSizeChange={setMovSize}
-        onBackgroundHexChange={setBackgroundHex}
         onBlurPxChange={setBlurPx}
       />
     </ThemeProvider>

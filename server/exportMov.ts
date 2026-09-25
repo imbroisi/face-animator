@@ -6,11 +6,11 @@ import { promisify } from 'node:util';
 import type { Plugin, Connect } from 'vite';
 import { catalogText, catalogs, isLocale, type Locale } from '../src/i18n/catalog.ts';
 import {
-  H264_ENCODE_ARGS,
   assertMovSequence,
   audioChannelLayout,
   concatLines,
   parseMovManifest,
+  proresEncodeArgs,
   splitBodyTail,
 } from '../src/export/movSequence.ts';
 
@@ -133,7 +133,7 @@ export function exportMovPlugin(): Plugin {
       if (!(audio instanceof File) || typeof raw !== 'string') {
         throw new Error('errorExportMissingFiles');
       }
-      const { duration, width, height, segments } = parseMovManifest(raw);
+      const { duration, width, height, blur, segments } = parseMovManifest(raw);
       assertMovSequence(duration, segments);
       const used = new Set(segments.map((segment) => segment.face));
       const { bodySegments, tailParts, bodyFrames } = splitBodyTail(segments);
@@ -170,15 +170,15 @@ export function exportMovPlugin(): Plugin {
         args: string[],
         onTime?: (seconds: number) => void,
       ) => runFfmpeg(ffmpeg, args, abort, onTime);
-      const encode = [...H264_ENCODE_ARGS];
+      const encode = proresEncodeArgs(blur);
       const bodySeconds = bodyFrames / 30;
       setPercent(6);
       // Head: digital silence. Tail: inaudible tone so Filmora does not trim the clip end.
       await run(['-f', 'lavfi', '-t', '2', '-i', `anullsrc=r=${rate}:cl=${layout}`, '-i', sourceAudio, '-filter_complex', `[0:a]${format}[s];[1:a]${format}[o];[s][o]concat=n=2:v=0:a=1[a]`, '-map', '[a]', '-c:a', 'pcm_s16le', bodyAudio]);
       await run(['-f', 'lavfi', '-t', '2', '-i', `sine=frequency=18:sample_rate=${rate}:duration=2`, '-af', `volume=0.0008,${format}`, '-c:a', 'pcm_s16le', tailAudio]);
       setPercent(10);
-      const bodyMov = join(directory, 'body.mp4');
-      const tailMov = join(directory, 'tail.mp4');
+      const bodyMov = join(directory, 'body.mov');
+      const tailMov = join(directory, 'tail.mov');
       await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'frames.txt'), '-i', bodyAudio, '-map', '0:v:0', '-map', '1:a:0', '-t', bodySeconds.toFixed(9), ...encode, bodyMov], (seconds) => {
         setPercent(10 + Math.min(1, seconds / Math.max(bodySeconds, 0.001)) * 75);
       });
@@ -187,14 +187,14 @@ export function exportMovPlugin(): Plugin {
         setPercent(85 + Math.min(1, seconds / 2) * 10);
       });
       setPercent(95);
-      await writeFile(join(directory, 'parts.txt'), 'ffconcat version 1.0\nfile body.mp4\nfile tail.mp4\n');
-      const output = join(directory, 'animation.mp4');
+      await writeFile(join(directory, 'parts.txt'), 'ffconcat version 1.0\nfile body.mov\nfile tail.mov\n');
+      const output = join(directory, 'animation.mov');
       await run(['-f', 'concat', '-safe', '0', '-i', join(directory, 'parts.txt'), '-c', 'copy', '-movflags', '+faststart', output]);
       const video = await readFile(output);
       setPercent(100);
-      res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': video.length, 'Content-Disposition': 'attachment; filename="animation.mp4"' }).end(video);
+      res.writeHead(200, { 'Content-Type': 'video/quicktime', 'Content-Length': video.length, 'Content-Disposition': 'attachment; filename="animation.mov"' }).end(video);
     } catch (error) {
-      console.error('MP4 export:', error);
+      console.error('MOV export:', error);
       const key = error instanceof Error && !('code' in error)
         ? error.message
         : 'errorExportFfmpeg';

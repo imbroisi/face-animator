@@ -1,5 +1,5 @@
 export function suggestedMovName(name: string) {
-  return `${name.replace(/\.[^.]+$/, '')}.mp4`;
+  return `${name.replace(/\.[^.]+$/, '')}.mov`;
 }
 
 export function downloadMov(blob: Blob, name: string) {
