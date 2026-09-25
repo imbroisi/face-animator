@@ -14,19 +14,18 @@ export type MovManifest = {
   segments: MovSegment[];
 };
 
-export const PRORES_ENCODE_ARGS = [
-  '-vf', 'format=rgba,fps=30,setsar=1',
-  '-sws_flags', 'neighbor+accurate_rnd+full_chroma_int+full_chroma_inp',
+// Opaque H.264 MP4: Filmora keeps correct timing and files stay small.
+// video_track_timescale 30000 matches the CFR timeline Filmora expects.
+export const H264_ENCODE_ARGS = [
+  '-vf', 'format=yuv420p,fps=30,setsar=1',
+  '-fps_mode', 'cfr',
   '-video_track_timescale', '30000',
-  '-color_range', 'pc',
-  '-colorspace', 'bt709',
-  '-color_primaries', 'bt709',
-  '-color_trc', 'iec61966-2-1',
-  '-c:v', 'prores_ks',
-  '-profile:v', '4',
-  '-pix_fmt', 'yuva444p10le',
-  '-alpha_bits', '16',
-  '-c:a', 'pcm_s16le',
+  '-c:v', 'libx264',
+  '-preset', 'fast',
+  '-crf', '18',
+  '-pix_fmt', 'yuv420p',
+  '-c:a', 'aac',
+  '-b:a', '128k',
 ] as const;
 
 export function parseMovManifest(raw: string): MovManifest {

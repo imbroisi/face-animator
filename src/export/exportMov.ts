@@ -4,50 +4,80 @@ import { applyEyeCycle, eyes, eyeStateFromCompositeId, mouthFromCompositeId, typ
 import { faces, type FaceType } from '../faces/Faces';
 import type { Locale } from '../i18n/catalog';
 import { encodeMovBrowser } from './encodeMovBrowser';
+import { cssBackgroundHex } from './exportLook';
 import { frameSize, type MovOutputSize } from './movSize';
 import { assertMovSequence, parseMovManifest } from './movSequence';
 
-function isChromaYellow(r: number, g: number, b: number) {
-  return r > 160 && g > 120 && b < 90 && r + g > 2.2 * (b + 8);
+function drawCentered(
+  context: CanvasRenderingContext2D,
+  image: CanvasImageSource,
+  width: number,
+  height: number,
+  sourceWidth: number,
+  sourceHeight: number,
+) {
+  context.drawImage(
+    image,
+    Math.floor((width - sourceWidth) / 2),
+    Math.floor((height - sourceHeight) / 2),
+  );
 }
 
-/** Keep transparent pixels in the key color so ProRes/YUV bleed stays keyable in Filmora. */
-function holdChromaInTransparent(context: CanvasRenderingContext2D, width: number, height: number) {
-  const image = context.getImageData(0, 0, width, height);
-  const pixels = image.data;
-  let chromaR = 250;
-  let chromaG = 193;
-  let chromaB = 15;
-  let count = 0;
-  let sumR = 0;
-  let sumG = 0;
-  let sumB = 0;
-  for (let i = 0; i < pixels.length; i += 4) {
-    if (pixels[i + 3] === 255 && isChromaYellow(pixels[i], pixels[i + 1], pixels[i + 2])) {
-      sumR += pixels[i];
-      sumG += pixels[i + 1];
-      sumB += pixels[i + 2];
-      count += 1;
+function compositeFace(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  mouth: HTMLImageElement,
+  eyesImage: HTMLImageElement | undefined,
+  backgroundHex: string,
+  blurPx: number,
+) {
+  context.filter = 'none';
+  context.fillStyle = cssBackgroundHex(backgroundHex);
+  context.fillRect(0, 0, width, height);
+  const blur = Number.isFinite(blurPx) && blurPx > 0 ? blurPx : 0;
+  if (blur === 0) {
+    drawCentered(context, mouth, width, height, mouth.naturalWidth, mouth.naturalHeight);
+    if (eyesImage) {
+      drawCentered(
+        context,
+        eyesImage,
+        width,
+        height,
+        eyesImage.naturalWidth,
+        eyesImage.naturalHeight,
+      );
     }
+    return;
   }
-  if (count) {
-    chromaR = Math.round(sumR / count);
-    chromaG = Math.round(sumG / count);
-    chromaB = Math.round(sumB / count);
+  const pad = Math.ceil(blur * 3);
+  const spriteWidth = Math.max(mouth.naturalWidth, eyesImage?.naturalWidth ?? 0) + pad * 2;
+  const spriteHeight = Math.max(mouth.naturalHeight, eyesImage?.naturalHeight ?? 0) + pad * 2;
+  const sprite = document.createElement('canvas');
+  sprite.width = spriteWidth;
+  sprite.height = spriteHeight;
+  const spriteContext = sprite.getContext('2d', { alpha: true, colorSpace: 'srgb' });
+  if (!spriteContext) throw new Error('errorPrepareImages');
+  spriteContext.filter = `blur(${blur}px)`;
+  drawCentered(
+    spriteContext,
+    mouth,
+    spriteWidth,
+    spriteHeight,
+    mouth.naturalWidth,
+    mouth.naturalHeight,
+  );
+  if (eyesImage) {
+    drawCentered(
+      spriteContext,
+      eyesImage,
+      spriteWidth,
+      spriteHeight,
+      eyesImage.naturalWidth,
+      eyesImage.naturalHeight,
+    );
   }
-  for (let i = 0; i < pixels.length; i += 4) {
-    const r = pixels[i];
-    const g = pixels[i + 1];
-    const b = pixels[i + 2];
-    const a = pixels[i + 3];
-    if (a === 0 || (a < 255 && isChromaYellow(r, g, b))) {
-      pixels[i] = chromaR;
-      pixels[i + 1] = chromaG;
-      pixels[i + 2] = chromaB;
-      pixels[i + 3] = 0;
-    }
-  }
-  context.putImageData(image, 0, 0);
+  drawCentered(context, sprite, width, height, spriteWidth, spriteHeight);
 }
 
 async function localExportAvailable(signal?: AbortSignal) {
@@ -66,6 +96,8 @@ export async function exportMov(
   timeline: MouthTimeline,
   faceAt: (time: number) => FaceType,
   size: MovOutputSize,
+  backgroundHex: string,
+  blurPx: number,
   locale: Locale,
   onProgress?: (percent: number) => void,
   signal?: AbortSignal,
@@ -127,7 +159,6 @@ export async function exportMov(
   }
   if (!width || !height) throw new Error('errorNoImages');
   report(8);
-  // The sprite keeps its width and sits centered in a taller transparent frame.
   const output = frameSize(size, width, height);
   width = output.width;
   height = output.height;
@@ -138,7 +169,7 @@ export async function exportMov(
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const context = canvas.getContext('2d', { alpha: true, colorSpace: 'srgb', willReadFrequently: true });
+  const context = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb', willReadFrequently: true });
   if (!context) throw new Error('errorPrepareImages');
   context.imageSmoothingEnabled = false;
   const pngs: { face: number; bytes: Uint8Array; blob: Blob }[] = [];
@@ -147,21 +178,15 @@ export async function exportMov(
     const layer = layers.get(face);
     const image = layer && decoded.get(layer.mouth);
     if (!image) throw new Error('errorMissingFrame');
-    context.clearRect(0, 0, width, height);
-    context.drawImage(
+    compositeFace(
+      context,
+      width,
+      height,
       image,
-      Math.floor((width - image.naturalWidth) / 2),
-      Math.floor((height - image.naturalHeight) / 2),
+      decoded.get(layer.eye),
+      backgroundHex,
+      blurPx,
     );
-    const eyesImage = decoded.get(layer.eye);
-    if (eyesImage) {
-      context.drawImage(
-        eyesImage,
-        Math.floor((width - eyesImage.naturalWidth) / 2),
-        Math.floor((height - eyesImage.naturalHeight) / 2),
-      );
-    }
-    holdChromaInTransparent(context, width, height);
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((png) => {
         if (png) resolve(png);
@@ -217,7 +242,7 @@ async function postLocalExport(
       signal,
       headers: { 'Accept-Language': locale },
     });
-    if (!response.ok || !response.headers.get('content-type')?.includes('video/quicktime')) {
+    if (!response.ok || !response.headers.get('content-type')?.includes('video/mp4')) {
       const error = await response.json().catch(() => null);
       throw new Error(error?.error || 'errorExportRestart');
     }

@@ -25,6 +25,9 @@ export type Catalog = {
   exampleSaveHint: string;
   saveMov: string;
   processingPercent: (percent: number) => string;
+  videoBackground: string;
+  videoBackgroundPicker: string;
+  videoBlur: string;
   audioArea: string;
   language: string;
   languageEn: string;
@@ -110,7 +113,7 @@ export const en: Catalog = {
   exampleDropHint: 'Drop the upset face here.',
   exampleReplayHint: 'Now click play to see the speech with the upset face included.',
   exampleSaveHint: 'Now it is time to save the animation, to use it in your video.',
-  saveMov: 'Save MOV',
+  saveMov: 'Save MP4',
   processingPercent: (percent) => `Processing… ${percent}%`,
   audioArea: 'Audio area',
   language: 'Language',
@@ -149,6 +152,9 @@ export const en: Catalog = {
   processing: 'Processing…',
   cancel: 'Cancel',
   videoSize: 'Video size',
+  videoBackground: 'Background',
+  videoBackgroundPicker: 'Choose background color',
+  videoBlur: 'Face blur (px)',
   size4k: '4K (height 2160)',
   size1080p: '1080p (height 1080)',
   sizeNative: 'Native (face resolution)',
@@ -178,7 +184,7 @@ export const en: Catalog = {
   errorExportMustEndClosed: 'The animation must end with 2 seconds of mouth-close.',
   errorExportInvalidImage: 'Invalid image.',
   errorExportImageSize: 'Image dimensions do not match the video.',
-  errorExportFfmpeg: 'Failed to generate the MOV.',
+  errorExportFfmpeg: 'Failed to generate the MP4.',
 };
 
 export const ptBR: Catalog = {
@@ -202,7 +208,7 @@ export const ptBR: Catalog = {
   exampleDropHint: 'Solte o aborrecido aqui.',
   exampleReplayHint: 'Agora clique em play para ver a fala com o aborrecido incluido.',
   exampleSaveHint: 'Agora está na hora de salvar a animação, para ser usada em seu vídeo.',
-  saveMov: 'Salvar MOV',
+  saveMov: 'Salvar MP4',
   processingPercent: (percent) => `Processando… ${percent}%`,
   audioArea: 'Área de áudio',
   language: 'Idioma',
@@ -241,6 +247,9 @@ export const ptBR: Catalog = {
   processing: 'Processando…',
   cancel: 'Cancelar',
   videoSize: 'Tamanho do vídeo',
+  videoBackground: 'Fundo',
+  videoBackgroundPicker: 'Escolher cor de fundo',
+  videoBlur: 'Blur da face (px)',
   size4k: '4K (altura 2160)',
   size1080p: '1080p (altura 1080)',
   sizeNative: 'Nativo (resolução da face)',
@@ -270,7 +279,7 @@ export const ptBR: Catalog = {
   errorExportMustEndClosed: 'A animação deve terminar com 2 segundos de mouth-close.',
   errorExportInvalidImage: 'Imagem inválida.',
   errorExportImageSize: 'Dimensões da imagem não correspondem ao vídeo.',
-  errorExportFfmpeg: 'Falha ao gerar o MOV.',
+  errorExportFfmpeg: 'Falha ao gerar o MP4.',
 };
 
 export const catalogs: Record<Locale, Catalog> = {

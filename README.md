@@ -31,10 +31,12 @@ A análise registra os inícios dos ciclos apenas ao carregar o áudio. Durante 
 
 O Rhubarb não é usado nessa abordagem; o áudio é processado integralmente no navegador.
 
-## Exportar MOV transparente
+## Exportar MP4
 
-Após carregar o áudio, clique em **Salvar MOV**. O download usa o nome do áudio e inclui a animação completa nas dimensões originais das imagens, a 30 fps, fundo transparente e vídeo ProRes 4444 com canal alpha. A trilha vem do arquivo original (mantém os canais), codificada em PCM de 16 bits; não é o áudio mono usado para análise. Os controles do editor não aparecem no vídeo.
+Após carregar o áudio, clique em **Salvar MP4**. O diálogo escolhe o tamanho do quadro, a cor de fundo e o blur da face; essas opções ficam salvas no `localStorage`. O download usa o nome do áudio e inclui a animação completa a 30 fps, em **MP4 H.264 opaco** (`yuv420p`) com áudio AAC — o mesmo formato do relógio, estável no Filmora. A trilha vem do arquivo original (mantém os canais), não o áudio mono usado para análise. Os controles do editor não aparecem no vídeo.
 
-A exportação usa FFmpeg no servidor local do Vite (`npm run dev` ou `npm run preview`). Instale FFmpeg e disponibilize-o no PATH, ou defina `FFMPEG_PATH`. Uma hospedagem apenas de arquivos estáticos não inclui esse endpoint. Limites atuais: 200 MB por envio, uma hora de áudio, uma exportação por vez e dez minutos de processamento. Os arquivos temporários são removidos ao terminar.
+Padrões: fundo `090b0d`, blur `2` px. Em 4K/1080p a largura da face se mantém e só a altura do quadro cresce.
 
-Se as imagens tiverem tamanhos diferentes, o vídeo usa a maior largura e altura do conjunto; as menores são centralizadas sem redimensionamento, sobre fundo transparente.
+A exportação tenta o FFmpeg no navegador; se falhar, usa o servidor local do Vite (`npm run dev` ou `npm run preview`). Instale FFmpeg e disponibilize-o no PATH, ou defina `FFMPEG_PATH`. Limites atuais no servidor: 200 MB por envio, uma hora de áudio, uma exportação por vez e dez minutos de processamento. Os arquivos temporários são removidos ao terminar.
+
+Se as imagens tiverem tamanhos diferentes, o vídeo usa a maior largura e altura do conjunto; as menores são centralizadas sem redimensionamento, sobre o fundo escolhido.

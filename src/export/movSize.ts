@@ -26,10 +26,17 @@ export function writeMovOutputSize(size: MovOutputSize) {
   } catch { /* ignore quota / private mode */ }
 }
 
+function toEven(value: number) {
+  const rounded = Math.floor(value);
+  if (rounded < 2) return 2;
+  return rounded % 2 === 0 ? rounded : rounded - 1;
+}
+
 /** Keeps the sprite width; only the frame height grows to the chosen resolution. */
 export function frameSize(size: MovOutputSize, spriteWidth: number, spriteHeight: number) {
-  if (size === 'native') return { width: spriteWidth, height: spriteHeight };
+  const width = toEven(spriteWidth);
+  if (size === 'native') return { width, height: toEven(spriteHeight) };
   const height = HEIGHTS[size];
   if (spriteHeight > height) throw new Error('errorFaceTooTall');
-  return { width: spriteWidth, height };
+  return { width, height };
 }
