@@ -1,5 +1,6 @@
 // ================= CONFIGURAÇÃO EDITÁVEL =================
-export const EYE_OPEN_TIME = 8; // segundos com eye-open.
+export const EYE_OPEN_TIME_FIRST = 2; // primeira abertura, até a 1ª piscada.
+export const EYE_OPEN_TIME = 8; // segundos com eye-open nas piscadas seguintes.
 export const EYE_OPEN_TIME_SHORT = 0.2; // segundos com eye-open.
 export const EYE_OPEN_TIME_SHORT_PERCENT = 0.25; // percent com eye-open.
 export const EYE_CLOSE_TIME = 0.15; // segundos com eye-close.
@@ -28,7 +29,7 @@ export const eyes = Object.fromEntries(
 const cycles: { start: number; open: number }[] = [];
 
 function nextOpenDuration(cycleIndex: number) {
-  if (cycleIndex === 0) return EYE_OPEN_TIME;
+  if (cycleIndex === 0) return EYE_OPEN_TIME_FIRST;
   if (cycles[cycleIndex - 1]?.open === EYE_OPEN_TIME_SHORT) return EYE_OPEN_TIME;
   return Math.random() < EYE_OPEN_TIME_SHORT_PERCENT ? EYE_OPEN_TIME_SHORT : EYE_OPEN_TIME;
 }
