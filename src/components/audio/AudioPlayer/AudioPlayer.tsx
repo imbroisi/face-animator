@@ -18,6 +18,7 @@ import type { FaceDrop, PaletteDrag, Track } from '../timelineTypes';
 const PLAYHEAD = '#29a7ff';
 const PLAYHEAD_HANDLE = 22;
 const PLAYHEAD_TO_LABELS = 6;
+const EMPTY_RULER_SECONDS = 10;
 const PIN_LANE = 46;
 const EDGE_HIT = 2;
 const EDGE_OUTSIDE = 3;
@@ -139,6 +140,7 @@ export function AudioPlayer({
 
   const total = duration && Number.isFinite(duration) ? duration : track.duration;
   const progress = total > 0 ? Math.min(1, position / total) : 0;
+  const rulerDuration = loadedTrack && total > 0 ? total : EMPTY_RULER_SECONDS;
 
   function seekTo(value: number) {
     const audio = audioRef.current;
@@ -505,7 +507,7 @@ export function AudioPlayer({
           sx={{
             position: 'absolute', left: 0, right: 0,
             top: 0,
-            height: `${PIN_LANE + PLAYHEAD_HANDLE + (loadedTrack && total > 0 ? PLAYHEAD_TO_LABELS + RULER_HEIGHT : 0)}px`,
+            height: `${PIN_LANE + PLAYHEAD_HANDLE + PLAYHEAD_TO_LABELS + RULER_HEIGHT}px`,
             zIndex: 0, pointerEvents: paletteDrag ? 'none' : 'auto', touchAction: 'none',
           }}
         />
@@ -538,20 +540,16 @@ export function AudioPlayer({
           ))}
         </Box>
         <Box sx={{ height: PLAYHEAD_HANDLE, position: 'relative', pointerEvents: 'none' }} />
-        {loadedTrack && total > 0
-          ? (
-              <Box
-                onPointerDown={handleWavePointerDown}
-                onPointerMove={handlePlayheadPointerMove}
-                onPointerUp={handlePlayheadPointerUp}
-                onPointerCancel={handlePlayheadPointerUp}
-                onLostPointerCapture={handlePlayheadPointerUp}
-                sx={{ pt: `${PLAYHEAD_TO_LABELS}px`, touchAction: 'none' }}
-              >
-                <TimeRuler duration={total} />
-              </Box>
-            )
-          : null}
+        <Box
+          onPointerDown={handleWavePointerDown}
+          onPointerMove={handlePlayheadPointerMove}
+          onPointerUp={handlePlayheadPointerUp}
+          onPointerCancel={handlePlayheadPointerUp}
+          onLostPointerCapture={handlePlayheadPointerUp}
+          sx={{ pt: `${PLAYHEAD_TO_LABELS}px`, touchAction: 'none' }}
+        >
+          <TimeRuler duration={rulerDuration} />
+        </Box>
         <Box
           ref={waveRef}
           onPointerDown={handleWavePointerDown}
