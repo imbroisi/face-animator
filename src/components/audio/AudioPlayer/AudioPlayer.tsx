@@ -6,6 +6,7 @@ import { eyes } from '../../../faces/eyes';
 import { useLocale } from '../../../i18n/LocaleProvider';
 import { FaceThumb } from '../../faces/FaceThumb';
 import { TimeDisplay } from '../TimeDisplay';
+import { TimeRuler, RULER_HEIGHT } from '../TimeRuler';
 import { Waveform } from '../Waveform';
 import {
   clampDropStart,
@@ -16,8 +17,8 @@ import type { FaceDrop, PaletteDrag, Track } from '../timelineTypes';
 
 const PLAYHEAD = '#29a7ff';
 const PLAYHEAD_HANDLE = 22;
+const PLAYHEAD_TO_LABELS = 6;
 const PIN_LANE = 46;
-const SEEK_ABOVE = 68;
 const EDGE_HIT = 2;
 const EDGE_OUTSIDE = 3;
 const MOVE_THRESHOLD = 6;
@@ -496,19 +497,18 @@ export function AudioPlayer({
         </Box>
       </Box>
       <Divider sx={{ mx: '12px', borderColor: 'rgba(255,255,255,0.12)' }} />
-      <Box sx={{ position: 'relative', m: '12px' }}>
+      <Box sx={{ position: 'relative', mx: '12px', mt: '12px' }}>
         <Box
           onPointerDown={handleWavePointerDown}
           onPointerUp={handlePlayheadPointerUp}
           onPointerCancel={handlePlayheadPointerUp}
           sx={{
             position: 'absolute', left: 0, right: 0,
-            top: `${Math.max(0, PLAYHEAD_HANDLE + PIN_LANE - SEEK_ABOVE)}px`,
-            height: `${Math.min(SEEK_ABOVE, PLAYHEAD_HANDLE + PIN_LANE)}px`,
+            top: 0,
+            height: `${PIN_LANE + PLAYHEAD_HANDLE + (loadedTrack && total > 0 ? PLAYHEAD_TO_LABELS + RULER_HEIGHT : 0)}px`,
             zIndex: 0, pointerEvents: paletteDrag ? 'none' : 'auto', touchAction: 'none',
           }}
         />
-        <Box sx={{ height: PLAYHEAD_HANDLE, position: 'relative', pointerEvents: 'none' }} />
         <Box sx={{ height: PIN_LANE, position: 'relative', pointerEvents: 'none' }}>
           {loadedTrack && total > 0 && drops.map((drop) => (
             <Box
@@ -537,6 +537,21 @@ export function AudioPlayer({
             </Box>
           ))}
         </Box>
+        <Box sx={{ height: PLAYHEAD_HANDLE, position: 'relative', pointerEvents: 'none' }} />
+        {loadedTrack && total > 0
+          ? (
+              <Box
+                onPointerDown={handleWavePointerDown}
+                onPointerMove={handlePlayheadPointerMove}
+                onPointerUp={handlePlayheadPointerUp}
+                onPointerCancel={handlePlayheadPointerUp}
+                onLostPointerCapture={handlePlayheadPointerUp}
+                sx={{ pt: `${PLAYHEAD_TO_LABELS}px`, touchAction: 'none' }}
+              >
+                <TimeRuler duration={total} />
+              </Box>
+            )
+          : null}
         <Box
           ref={waveRef}
           onPointerDown={handleWavePointerDown}
@@ -595,7 +610,7 @@ export function AudioPlayer({
           ]))}
         </Box>
         <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 }}>
-          <Box aria-hidden="true" sx={{ position: 'absolute', top: PLAYHEAD_HANDLE, bottom: 0, left: `clamp(0px, ${progress * 100}%, calc(100% - 2px))`, width: '2px', bgcolor: PLAYHEAD }} />
+          <Box aria-hidden="true" sx={{ position: 'absolute', top: PIN_LANE + PLAYHEAD_HANDLE, bottom: 0, left: `clamp(0px, ${progress * 100}%, calc(100% - 2px))`, width: '2px', bgcolor: PLAYHEAD }} />
           <Box
             role="slider"
             aria-label={copy.playhead}
@@ -609,7 +624,7 @@ export function AudioPlayer({
             onPointerUp={handlePlayheadPointerUp}
             onPointerCancel={handlePlayheadPointerUp}
             sx={{
-              position: 'absolute', top: 0, left: `clamp(0px, ${progress * 100}%, calc(100% - 2px))`,
+              position: 'absolute', top: PIN_LANE, left: `clamp(0px, ${progress * 100}%, calc(100% - 2px))`,
               width: 16, height: PLAYHEAD_HANDLE, ml: '-7px', bgcolor: PLAYHEAD,
               clipPath: 'polygon(0 0, 100% 0, 100% 52%, 50% 100%, 0 52%)',
               pointerEvents: loadedTrack && !paletteDrag ? 'auto' : 'none',

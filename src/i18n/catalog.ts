@@ -45,6 +45,7 @@ export type Catalog = {
   ball: string;
   mouth: string;
   waveform: string;
+  timeMarks: string;
   currentTime: string;
   totalTime: string;
   stepBack: string;
@@ -137,6 +138,7 @@ export const en: Catalog = {
   ball: 'Ball',
   mouth: 'Mouth',
   waveform: 'Mono waveform of the loaded audio',
+  timeMarks: 'Time marks on the speech area',
   currentTime: 'Current time',
   totalTime: 'Total time',
   stepBack: 'Back 1 frame',
@@ -230,6 +232,7 @@ export const ptBR: Catalog = {
   ball: 'Bola',
   mouth: 'Boca',
   waveform: 'Forma de onda mono do áudio carregado',
+  timeMarks: 'Marcas de tempo na área da fala',
   currentTime: 'Tempo atual',
   totalTime: 'Tempo total',
   stepBack: 'Recuar 1 quadro',

@@ -63,7 +63,7 @@ export function Waveform({
       ref={ref}
       role="img"
       aria-label={copy.waveform}
-      style={{ display: 'block', width: '100%', height: 96 }}
+      style={{ display: 'block', width: '100%', height: 150 }}
     />
   );
 }

@@ -398,7 +398,15 @@ export function App() {
       <CssBaseline />
       <Box
         component="main"
-        sx={{ width: '100%', height: '100dvh', pt: 2, display: 'flex', flexDirection: 'column' }}
+        sx={{
+          width: '100%',
+          height: '100dvh',
+          pt: 2,
+          pb: '32px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
       >
         <Stack
           direction="row"
@@ -497,7 +505,7 @@ export function App() {
           </Box>
         </Stack>
         {error && <Alert severity="error" sx={{ mx: 2, mb: 2 }}>{error}</Alert>}
-        <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
           <PreviewStage
             mouthSrc={faces[previewFace][faceLevel]}
             eyeSrc={eyeOverlay}
